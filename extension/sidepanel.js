@@ -3,7 +3,7 @@
  * Features: dual audio (You/Guest), split transcript, meeting prep briefing, dynamic nudges.
  */
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = 'https://meeting-copilot-iota.vercel.app';
 const INTERROGATIVE_STARTERS = /^(what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall)\b/i;
 const DEBOUNCE_MS = 3000;
 const NUDGE_INTERVAL_MS = 50000; // 50 seconds
