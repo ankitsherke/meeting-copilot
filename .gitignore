@@ -1,0 +1,31 @@
+# Environment
+.env
+*.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ChromaDB data (pre-seeded — commit only if needed for Vercel)
+# backend/chroma_db/
+
+# Claude Code settings
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

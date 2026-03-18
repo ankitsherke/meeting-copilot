@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meeting Copilot</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <span class="app-icon">🎙️</span>
+      <span class="app-name">Meeting Copilot</span>
+    </div>
+    <div class="header-right">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-label" id="statusLabel">Ready</span>
+      <span class="timer" id="timer"></span>
+    </div>
+  </header>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn-start" id="startBtn">▶ Start Listening</button>
+    <button class="btn-stop hidden" id="stopBtn">⏹ Stop</button>
+    <button class="btn-manual hidden" id="manualBtn" title="Manually trigger a suggestion">💡 Help Me Respond</button>
+  </div>
+
+  <!-- API Key Setup (shown when key is missing) -->
+  <div class="api-setup" id="apiSetup">
+    <p class="setup-title">⚙️ Deepgram API Key Required</p>
+    <input type="password" id="deepgramKeyInput" placeholder="Enter Deepgram API key..." class="key-input" />
+    <button class="btn-save" id="saveKeyBtn">Save Key</button>
+    <p class="setup-hint">Get a free key at <strong>deepgram.com</strong></p>
+  </div>
+
+  <!-- Mic Permission Banner -->
+  <div class="mic-banner hidden" id="micBanner">
+    <span>🎤 Mic access needed for "You" transcription.</span>
+    <button class="btn-mic-allow" id="micAllowBtn">Allow Mic</button>
+  </div>
+
+  <!-- Meeting Prep -->
+  <div class="meeting-prep-section" id="meetingPrepSection">
+    <div class="meeting-prep-header">
+      <span class="section-title">📋 Meeting Prep</span>
+      <button class="btn-toggle" id="meetingPrepToggle">▼</button>
+    </div>
+    <div id="meetingPrepBody">
+      <div id="prepInputArea">
+        <textarea id="agendaText" class="agenda-input" placeholder="Paste meeting agenda, title, or topics..." rows="3"></textarea>
+        <button class="btn-brief" id="generateBriefBtn">Generate Brief</button>
+      </div>
+      <div id="briefingCard" class="hidden">
+        <div class="briefing-content" id="briefingContent"></div>
+      </div>
+      <div id="agendaChecklist" class="hidden"></div>
+    </div>
+  </div>
+
+  <!-- Nudges -->
+  <div class="nudges-section hidden" id="nudgesSection">
+    <div class="nudges-header">
+      <span class="section-title">💡 Nudges</span>
+      <span class="nudge-spinner hidden" id="nudgeSpinner">⏳</span>
+    </div>
+    <div id="nudgesList"></div>
+  </div>
+
+  <!-- Transcript -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-title">Live Transcript</span>
+      <button class="btn-clear" id="clearBtn">Clear</button>
+    </div>
+    <div class="transcript" id="transcript">
+      <p class="placeholder-text">Transcript will appear here when you start listening...</p>
+    </div>
+  </section>
+
+  <!-- Suggestion -->
+  <section class="section" id="suggestionSection" style="display:none">
+    <div class="section-header">
+      <span class="section-title">💬 Suggested Response</span>
+      <span class="suggestion-spinner hidden" id="spinner">⏳</span>
+    </div>
+    <div class="suggestion-card" id="suggestionCard">
+      <div class="suggestion-text" id="suggestionText"></div>
+      <div class="suggestion-footer">
+        <span class="source-label" id="sourceLabel"></span>
+        <button class="btn-copy" id="copyBtn">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Suggestion History -->
+  <section class="section" id="historySection" style="display:none">
+    <div class="section-header">
+      <span class="section-title">History</span>
+      <button class="btn-toggle" id="historyToggle">▼</button>
+    </div>
+    <div class="history-list hidden" id="historyList"></div>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
