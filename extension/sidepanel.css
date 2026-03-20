@@ -463,8 +463,23 @@ button { cursor: pointer; border: none; background: none; }
   background: var(--bg-3);
 }
 
-.btn-next-move-done {
+.next-move-back-btn {
   margin-left: auto;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  color: var(--text-3);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.next-move-back-btn:hover {
+  color: var(--text-2);
+  border-color: var(--text-3);
+}
+
+.btn-next-move-done {
   font-size: 11px;
   font-weight: 600;
   color: var(--c-script);

@@ -656,3 +656,81 @@ Students with ₹40–50L education loans (common for Australia/UK) will face EM
 ---
 
 *Last updated: March 2026. Review quarterly and after any major visa policy announcement. Confirm visa financial thresholds at the start of each intake cycle as they are adjusted annually.*
+
+---
+
+## Section 6: Vetted Answers to Common Student Questions
+
+These are Leap-approved answers counsellors should give when these questions arise. Deliver them confidently and in your own words.
+
+---
+
+### 6.1 Geopolitical safety — Is it safe to go abroad right now?
+
+**Vetted answer:** The countries we recommend for Indian students — Australia, UK, Ireland, Germany, UAE, Canada, and Singapore — are all stable and safe. None of them have active travel advisories for Indian nationals. Indian students have been studying in all these destinations throughout recent global events without any disruption to their safety, academics, or visa status.
+
+If the student is asking about Middle East tensions specifically: The UAE — particularly Dubai and Abu Dhabi — has remained fully insulated from regional tensions. UAE universities have not been disrupted in any way, and Indian students continue to arrive and study there normally.
+
+If the student is asking generally about whether now is a good time to go: The answer is yes. Intake cycles are unaffected. University admissions, visa processing, and flight connectivity are all normal across every destination we work with.
+
+**Counsellor note:** Validate the concern first — "That's a completely fair thing to think about" — then give the above facts. Do not dismiss the concern.
+
+---
+
+### 6.2 PR and long-term settlement — Which country is best for PR?
+
+**Vetted answer:** It depends on the student's profile and timeline. The honest ranking for Indian students today:
+
+- **Australia**: Medium difficulty. Points-based skilled migration. Realistic in 3–5 years post-graduation with Australian work experience.
+- **Canada**: Medium difficulty but getting harder. Express Entry / CEC pathway is well-defined but CRS score cutoffs have risen. Tech and engineering occupations convert best.
+- **Ireland**: Medium. Stamp 4 after 5 years of legal residence. Dublin's tech sector gives strong employment conversion, which is the foundation for the PR pathway.
+- **Germany**: Medium. EU Blue Card → PR after 21 months of Blue Card employment with B1 German. Skills shortage actively benefits Indian graduates.
+- **UK**: Hard. No direct post-study PR route. Skilled Worker visa → ILR after 5 years. Employer-dependent.
+- **UAE**: Not applicable. No conventional PR pathway.
+- **Singapore**: Hard. Discretionary, not rules-based. Not a reliable PR target.
+
+**Counsellor note:** Never promise PR. Frame it as a pathway with conditions, not a guaranteed outcome.
+
+---
+
+### 6.3 Education loans — Which bank is best and what is the process?
+
+**Vetted answer:** For studying abroad, the most commonly used lenders are:
+
+- **SBI Global Ed-Vantage**: Up to ₹1.5Cr without collateral for select universities. Strong for Australia, UK, USA.
+- **Union Bank of India**: Up to ₹40L without collateral; above that with property or FD as collateral.
+- **HDFC Credila**: Private lender, faster processing, slightly higher interest rate (10.5–12%). Good for students who need quick turnaround.
+- **Axis Bank**: Competitive rates, strong for UK and Ireland.
+- **Avanse / InCred**: NBFCs with flexible documentation requirements; useful for students with non-standard income proofs.
+
+General process: application → sanction → acceptance letter from university → final disbursement schedule confirmed → visa application.
+
+**Key rule for visa purposes**: Do not apply for the visa immediately after loan sanction. Wait for at least one disbursement instalment to appear in bank statements. This is especially important for Australia GTE and UK 28-day rule compliance.
+
+---
+
+### 6.4 IELTS waiver — Can the student avoid taking IELTS?
+
+**Vetted answer:** Yes, in some cases. The main waiver routes:
+
+- **Medium of Instruction (MOI) waiver**: If the student completed their entire Bachelor's degree in English-medium instruction, many UK and Irish universities will waive IELTS. The student needs a letter from their university confirming the medium of instruction.
+- **IELTS waiver by country**: Germany (for English-taught programs) accepts MOI waivers from many Indian universities. Australia generally does not accept MOI waivers for visa purposes — IELTS is required for the visa even if the university waives it for admission.
+- **Duolingo English Test**: Accepted by some universities in USA, Canada, and Germany as an alternative to IELTS. Not accepted for UK, Australia, or Ireland visa purposes.
+- **PTE Academic**: Accepted for Australia visa purposes and by most UK and Irish universities. Faster results and more flexible scheduling than IELTS.
+
+**Counsellor note:** The university waiver and the visa requirement are separate. A student can be admitted without IELTS but still need it for the visa. Always check both.
+
+---
+
+### 6.5 What happens if the student gets a low CGPA — are they still eligible?
+
+**Vetted answer:** It depends on the country and the university tier. General guidance:
+
+- **Below 6.0 CGPA**: Options exist but are limited. Ireland (NCI, TUS, SETU), UK post-92 universities (Coventry, Hertfordshire, Lincoln), and some Australian regional universities (Federation, CQU, USC) work in this range.
+- **6.0–7.0 CGPA**: Good range for Ireland, UK post-92, regional Australia, and UAE campuses of UK universities.
+- **7.0–8.0 CGPA**: Strong range for most Australian universities, mid-tier UK, and most Irish universities.
+- **8.0+ CGPA**: Competitive for Russell Group UK, Group of Eight Australia, NUS Singapore, and TU9 Germany.
+
+Work experience can compensate for a lower CGPA, especially for MBA and MSc Management programs. Portfolio quality is the primary admission criterion for design programs — CGPA is secondary.
+
+**Counsellor note:** Never close the conversation on CGPA alone. Ask about work experience, portfolio, research, or other differentiators before deciding the student is not eligible.

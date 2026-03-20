@@ -137,7 +137,25 @@ Confidence levels:
 }
 ```
 
-Only mark a moment as "covered" when the transcript clearly shows that topic was discussed.
+Mark a moment as "covered" when the topic was touched at all — a brief mention counts. Be generous. The counsellor has a back button to undo if needed.
+
+Specific detection rules:
+- `intro_self`: counsellor said their name or introduced themselves → covered
+- `intro_purpose`: counsellor mentioned the goal or agenda of the call → covered
+- `intro_state`: counsellor asked where the student is in their study abroad journey → covered
+- `profile_career`: counsellor asked about career goals OR student described what they want to do → covered
+- `profile_validate`: counsellor confirmed or repeated back any profile detail → covered
+- `profile_params`: counsellor asked what matters most in university selection → covered
+- `reaffirm_conviction`: counsellor said something affirming about the student's profile or path → covered
+- `reaffirm_colleges`: counsellor mentioned one or more specific universities → covered
+- `reaffirm_similar`: counsellor mentioned a past student or outcome profile → covered
+- `reaffirm_questions`: counsellor asked if the student has any questions → covered
+- `close_leap`: counsellor mentioned Leap's services or platform → covered
+- `close_app`: counsellor mentioned the Leap app or next steps on the app → covered
+- `close_schedule`: counsellor mentioned scheduling the next call or follow-up → covered
+- `close_contact`: counsellor gave contact details or mentioned WhatsApp → covered
+
+Always scan the full transcript and return every moment you can detect. Return an empty object only if nothing was detected.
 
 ## Signal types and when to fire them
 
@@ -149,6 +167,20 @@ Level 2 — COUNSELLOR MISFILED: Counsellor assigned a course category that cont
 Level 3 — STUDENT PUSHED BACK: Student explicitly rejected the assigned category.
 
 CRITICAL RULE: If profile_mismatch is active, flag any attempt to advance to eligibility fields (CGPA, 12th score, backlogs) as premature.
+
+**Example of a well-formed profile_mismatch nudge — use as a quality benchmark:**
+```json
+{
+  "type": "profile_mismatch",
+  "priority": 1,
+  "title": "Spatial design ≠ event management",
+  "text": "Student described spatial brand design, pop-up environments, and brand identity work. 'Event management' is the wrong category and will produce a wrong shortlist.",
+  "suggestion": "What I'm hearing is that you design the physical space and brand environment for clients — the event is the context, not the service. Would 'spatial design' or 'experiential design' feel more accurate for what you do?",
+  "reason": "Student said: 'I design the whole space according to the brand guidelines, I do their pop-ups, I represent the brand in different cities.' Counsellor responded: 'vo designing mein nahi aata, it comes under event management.'"
+}
+```
+
+The `suggestion` must always be a complete sentence the counsellor can say aloud word-for-word. It should reframe what the student said back to them as a question, not tell the counsellor what to do.
 
 ### P1 — intent_divergence (RED)
 Fire when the student's stated intent diverges from the assumption the counsellor is operating on.

@@ -109,6 +109,7 @@ const nextMoveScriptLabel   = document.getElementById('nextMoveScriptLabel');
 const nextMoveQuestion      = document.getElementById('nextMoveQuestion');
 const nextMoveFieldReminder = document.getElementById('nextMoveFieldReminder');
 const nextMoveDoneBtn       = document.getElementById('nextMoveDoneBtn');
+const nextMoveBackBtn       = document.getElementById('nextMoveBackBtn');
 
 // In-call — Assist card (reactive nudges)
 const assistCardWrap      = document.getElementById('assistCardWrap');
@@ -657,6 +658,17 @@ nextMoveDoneBtn.addEventListener('click', () => {
   }
 });
 
+nextMoveBackBtn.addEventListener('click', () => {
+  const theme = getCounsellingTheme();
+  const moments = [...theme.scriptMoments].reverse();
+  const lastCovered = moments.find(m => scriptState[m.id] === 'covered');
+  if (lastCovered) {
+    scriptState[lastCovered.id] = 'pending';
+    renderScriptTracker();
+    renderNextMove();
+  }
+});
+
 assistCopyBtn.addEventListener('click', () => {
   if (activeNudge?.suggestion) {
     navigator.clipboard.writeText(activeNudge.suggestion).catch(() => {});
@@ -898,8 +910,10 @@ function handleDeepgramMessage(event, speaker) {
     appendTranscriptBubble(text, speaker, false);
     transcriptBuffer.push({ text, speaker, timestamp: Date.now() });
 
-    // Question detection on either speaker → /query
-    maybeQueryBackend(text);
+    // Only trigger KB on student questions, not counsellor
+    if (speaker === 'guest') {
+      maybeQueryBackend(text);
+    }
 
     // Speech-triggered nudge: debounce 4s after conversation pauses
     wordsSinceLastNudge += text.split(/\s+/).filter(Boolean).length;
@@ -959,9 +973,15 @@ const QUESTION_STARTERS = /^(what|how|when|where|why|who|which|can|could|do|does
 let lastQueryTime = 0;
 const QUERY_DEBOUNCE_MS = 4000;
 
+const NON_FACTUAL_PATTERNS = /\b(what the|wtf|seriously|really\?|right\?|isn't it|don't you|are you sure|you know what|i mean|like what|have you said|are you kidding|what do you mean)\b/i;
+const EMOTIONAL_STARTERS = /^(oh|wow|really|seriously|wait|no|yes|okay|ok|hmm|ugh|so|but|and|well|i think|i feel|i just)\b/i;
+
 function maybeQueryBackend(text) {
   const isQuestion = text.endsWith('?') || QUESTION_STARTERS.test(text);
   if (!isQuestion) return;
+  if (NON_FACTUAL_PATTERNS.test(text)) return;
+  if (EMOTIONAL_STARTERS.test(text)) return;
+  if (text.split(' ').filter(Boolean).length < 5) return;
   if (Date.now() - lastQueryTime < QUERY_DEBOUNCE_MS) return;
   lastQueryTime = Date.now();
   runQuery(text);
