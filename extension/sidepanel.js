@@ -350,13 +350,19 @@ generateBriefBtn.addEventListener('click', async () => {
   generateBriefBtn.textContent = '⟳ Generating...';
   generateBriefBtn.classList.add('loading');
 
-  const agenda = `Student: ${activeStudent.name}\nInitial interest: ${activeStudent.initial_interest || ''}\nCall number: ${(activeStudent.call_count || 0) + 1}`;
+  const callNumber = (activeStudent.call_count || 0) + 1;
+  const callHistoryText = (activeStudent.callHistory || [])
+    .map(h => h.content || '').join('\n\n').trim();
 
   try {
     const data = await fetch(`${BACKEND_URL}/brief`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agenda, student_context: activeStudent }),
+      body: JSON.stringify({
+        student_profile: activeStudent,
+        call_history: callHistoryText || null,
+        call_number: callNumber,
+      }),
     }).then(r => r.json());
 
     renderBriefCard(data);
@@ -372,25 +378,46 @@ generateBriefBtn.addEventListener('click', async () => {
 function renderBriefCard(data) {
   let html = '';
 
-  if (data.key_facts?.length) {
-    html += `<div class="brief-section-title">Key Facts</div>`;
-    html += data.key_facts.map(f => `<div class="brief-bullet">• ${escapeHtml(f)}</div>`).join('');
-  }
-  if (data.likely_questions?.length) {
-    html += `<div class="brief-section-title">Likely Questions</div>`;
-    html += data.likely_questions.map(q => `
-      <div class="brief-qa">
-        <div class="brief-q">Q: ${escapeHtml(q.q)}</div>
-        <div class="brief-a">A: ${escapeHtml(q.a)}</div>
-      </div>
-    `).join('');
-  }
+  // Carry-forwards — highest priority, shown first
   if (data.carry_forwards?.length) {
-    html += `<div class="brief-section-title">From Last Call</div>`;
-    html += data.carry_forwards.map(f => `<div class="brief-bullet">⚠ ${escapeHtml(f)}</div>`).join('');
+    const highs = data.carry_forwards.filter(c => c.urgency === 'high');
+    const meds  = data.carry_forwards.filter(c => c.urgency !== 'high');
+    const renderCF = (items) => items.map(c => {
+      const text = typeof c === 'string' ? c : c.text;
+      return `<div class="brief-bullet carry-forward">⚠ ${escapeHtml(text)}</div>`;
+    }).join('');
+    if (highs.length || meds.length) {
+      html += `<div class="brief-section-title">From Last Call</div>`;
+      html += renderCF(highs) + renderCF(meds);
+    }
   }
 
-  briefingContent.innerHTML = html;
+  // Profile context
+  if (data.profile_context) {
+    html += `<div class="brief-section-title">Profile</div>`;
+    html += `<div class="brief-context">${escapeHtml(data.profile_context)}</div>`;
+  }
+
+  // Shortlist readiness
+  const sr = data.shortlist_readiness;
+  if (sr) {
+    const pct = sr.required_total ? Math.round((sr.required_captured / sr.required_total) * 100) : 0;
+    html += `<div class="brief-section-title">Shortlist Readiness</div>`;
+    html += `<div class="readiness-bar-wrap">
+      <div class="readiness-bar" style="width:${pct}%"></div>
+    </div>`;
+    if (sr.missing_required?.length) {
+      html += `<div class="brief-missing">Missing: ${sr.missing_required.map(escapeHtml).join(', ')}</div>`;
+    }
+  }
+
+  // Tone guidance
+  if (data.tone_guidance) {
+    html += `<div class="brief-section-title">Tone</div>`;
+    html += `<div class="brief-tone">${escapeHtml(data.tone_guidance)}</div>`;
+  }
+
+  briefingContent.innerHTML = html || '<div class="brief-bullet">No briefing data available.</div>';
   briefingCard.classList.remove('hidden');
 }
 
