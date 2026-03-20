@@ -102,9 +102,16 @@ const briefingCard        = document.getElementById('briefingCard');
 const briefingContent     = document.getElementById('briefingContent');
 const startBtn            = document.getElementById('startBtn');
 
-// In-call
+// In-call — Next Move
+const nextMoveCard          = document.getElementById('nextMoveCard');
+const nextMoveSectionBadge  = document.getElementById('nextMoveSectionBadge');
+const nextMoveScriptLabel   = document.getElementById('nextMoveScriptLabel');
+const nextMoveQuestion      = document.getElementById('nextMoveQuestion');
+const nextMoveFieldReminder = document.getElementById('nextMoveFieldReminder');
+const nextMoveDoneBtn       = document.getElementById('nextMoveDoneBtn');
+
+// In-call — Assist card (reactive nudges)
 const assistCardWrap      = document.getElementById('assistCardWrap');
-const assistCardEmpty     = document.getElementById('assistCardEmpty');
 const assistCard          = document.getElementById('assistCard');
 const assistTypeBadge     = document.getElementById('assistTypeBadge');
 const assistExplanation   = document.getElementById('assistExplanation');
@@ -462,7 +469,7 @@ function applyExtractedFields(fields) {
     fieldState[key] = { value: info.value, status: 'detected' };
     anyNew = true;
   }
-  if (anyNew) renderFieldPills();
+  if (anyNew) { renderFieldPills(); renderNextMove(); }
 }
 
 function applyScriptStateUpdate(update) {
@@ -474,7 +481,7 @@ function applyScriptStateUpdate(update) {
       changed = true;
     }
   }
-  if (changed) renderScriptTracker();
+  if (changed) { renderScriptTracker(); renderNextMove(); }
 }
 
 // ── Render field pills ─────────────────────────────────────────────────────────
@@ -550,7 +557,6 @@ const TYPE_LABELS = {
 
 function showAssistCard(nudge) {
   activeNudge = nudge;
-  assistCardEmpty.classList.add('hidden');
   assistCard.classList.remove('hidden');
 
   assistCard.className = `assist-card type-${nudge.type}`;
@@ -567,9 +573,89 @@ function showAssistCard(nudge) {
 function hideAssistCard() {
   activeNudge = null;
   assistCard.classList.add('hidden');
-  assistCardEmpty.classList.remove('hidden');
   assistPeekRow.innerHTML = '';
 }
+
+// ── Next Move card ─────────────────────────────────────────────────────────────
+
+const FIELD_QUESTIONS = {
+  country:               'Which country or countries are you considering?',
+  intake:                'When are you looking to start — which year and intake?',
+  budget:                'What is your budget for the full program including living expenses?',
+  preferred_course:      'What course or program do you want to study?',
+  preferred_degree:      'Are you targeting a Masters, Bachelors, Diploma, or something else?',
+  preferred_location:    'Do you have a preferred city or region within that country?',
+  work_experience_months:'How many months of work experience do you have so far?',
+  backlogs:              'Do you have any backlogs in your degree?',
+  ielts_score:           'Have you taken IELTS or PTE? What was your score?',
+  ug_score:              'What is your undergraduate CGPA or percentage?',
+  gre_gmat_score:        'Have you taken the GRE or GMAT?',
+  college_in_mind:       'Are there any specific universities you already have in mind?',
+};
+
+const SECTION_COLORS = {
+  Rapport: 'var(--c-script)',
+  Profiling: 'var(--c-profile)',
+  Reaffirmation: 'var(--c-kb)',
+  Close: '#888',
+};
+
+function renderNextMove() {
+  if (!isRecording) return;
+
+  const theme = getCounsellingTheme();
+  const moments = theme.scriptMoments;
+
+  // Find the next uncovered script moment
+  const nextMoment = moments.find(m => {
+    const s = scriptState[m.id];
+    return !s || s === 'pending';
+  });
+
+  if (!nextMoment) {
+    nextMoveCard.classList.add('all-done');
+    nextMoveScriptLabel.textContent = 'All script moments covered';
+    nextMoveQuestion.textContent = 'Great work — wrap up and book the next call.';
+    nextMoveSectionBadge.textContent = 'Complete';
+    nextMoveFieldReminder.classList.add('hidden');
+    return;
+  }
+
+  nextMoveCard.classList.remove('all-done');
+  nextMoveSectionBadge.textContent = nextMoment.section;
+  nextMoveSectionBadge.style.color = SECTION_COLORS[nextMoment.section] || '#888';
+  nextMoveScriptLabel.textContent = nextMoment.label;
+  nextMoveQuestion.textContent = nextMoment.suggestedQuestion;
+
+  // Field reminder: show missing required fields if we're in Profiling or later
+  const sectionOrder = ['Rapport', 'Profiling', 'Reaffirmation', 'Close'];
+  const currentSectionIdx = sectionOrder.indexOf(nextMoment.section);
+  if (currentSectionIdx >= 1) {
+    const missingRequired = REQUIRED_FIELDS.filter(f => !fieldState[f] || fieldState[f].status === 'empty');
+    if (missingRequired.length > 0) {
+      nextMoveFieldReminder.textContent = `Still need: ${missingRequired.map(f => FIELD_LABELS[f]).join(', ')}`;
+      nextMoveFieldReminder.classList.remove('hidden');
+    } else {
+      nextMoveFieldReminder.classList.add('hidden');
+    }
+  } else {
+    nextMoveFieldReminder.classList.add('hidden');
+  }
+}
+
+// "Done" button manually marks current moment as covered and advances
+nextMoveDoneBtn.addEventListener('click', () => {
+  const theme = getCounsellingTheme();
+  const nextMoment = theme.scriptMoments.find(m => {
+    const s = scriptState[m.id];
+    return !s || s === 'pending';
+  });
+  if (nextMoment) {
+    scriptState[nextMoment.id] = 'covered';
+    renderScriptTracker();
+    renderNextMove();
+  }
+});
 
 assistCopyBtn.addEventListener('click', () => {
   if (activeNudge?.suggestion) {
@@ -627,6 +713,7 @@ async function startRecording() {
   hideAssistCard();
   renderScriptTracker();
   renderFieldPills();
+  renderNextMove();
   clearTranscript();
 
   statusDot.classList.add('recording');

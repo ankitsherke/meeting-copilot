@@ -429,30 +429,89 @@ button { cursor: pointer; border: none; background: none; }
 /* ── IN-CALL ───────────────────────────────────────────────────────────────── */
 
 /* Assist card */
-.assist-card-wrap {
-  margin-bottom: 10px;
-  min-height: 72px;
+/* ── Next Move card ─────────────────────────────────────────────────────────── */
+
+.next-move-card {
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
 }
 
-.assist-card-empty {
+.next-move-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
-  background: var(--bg-2);
-  border: 1px dashed var(--border-dark);
-  border-radius: 8px;
-  color: var(--text-3);
-  font-size: 12px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
-.listening-pulse {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--dot-recording);
-  flex-shrink: 0;
-  animation: pulse-dot 1.2s infinite;
+.next-move-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
 }
+
+.next-move-section-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--bg-3);
+}
+
+.btn-next-move-done {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-script);
+  background: var(--c-script-bg);
+  border: 1px solid var(--c-script);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.btn-next-move-done:hover { opacity: 0.8; }
+
+.next-move-script-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 5px;
+}
+
+.next-move-question {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.45;
+  background: var(--bg-2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--brand);
+}
+
+.next-move-field-reminder {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--c-emotional);
+  font-weight: 500;
+}
+
+.next-move-card.all-done .next-move-question {
+  color: var(--c-script);
+  border-left-color: var(--c-script);
+}
+
+/* ── Assist card wrap ─────────────────────────────────────────────────────────── */
+
+.assist-card-wrap {
+  margin-bottom: 10px;
+}
+
 
 .assist-card {
   border-radius: 8px;

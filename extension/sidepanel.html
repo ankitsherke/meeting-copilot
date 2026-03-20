@@ -120,12 +120,20 @@
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="stateInCall" class="state-panel hidden">
 
-    <!-- Assist card -->
-    <div class="assist-card-wrap" id="assistCardWrap">
-      <div class="assist-card-empty" id="assistCardEmpty">
-        <span class="listening-pulse"></span>
-        Listening for conversation context...
+    <!-- Next Move card — always visible, proactive script guidance -->
+    <div class="next-move-card" id="nextMoveCard">
+      <div class="next-move-header">
+        <span class="next-move-label">Say next</span>
+        <span class="next-move-section-badge" id="nextMoveSectionBadge"></span>
+        <button class="btn-next-move-done" id="nextMoveDoneBtn" title="Mark as done">✓ Done</button>
       </div>
+      <div class="next-move-script-label" id="nextMoveScriptLabel"></div>
+      <div class="next-move-question" id="nextMoveQuestion"></div>
+      <div class="next-move-field-reminder hidden" id="nextMoveFieldReminder"></div>
+    </div>
+
+    <!-- Assist card — reactive nudges (signal detected) -->
+    <div class="assist-card-wrap" id="assistCardWrap">
       <div class="assist-card hidden" id="assistCard">
         <div class="assist-card-top">
           <span class="assist-type-badge" id="assistTypeBadge"></span>
