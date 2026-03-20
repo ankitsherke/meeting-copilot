@@ -1,81 +1,69 @@
 /**
- * nudge-engine.js — Priority queue for meeting nudges
- * Loaded before sidepanel.js in sidepanel.html
+ * nudge-engine.js — Priority queue for counsellor assist card nudges
  *
- * Priority Tiers:
- *   P4 (highest): closing_cue, checklist_reminder (critical items past threshold)
- *   P3:           kb_answer, objection_handler
- *   P2:           context_recall, sentiment_shift, goal_drift_alert
- *   P1 (lowest):  silence_prompt
+ * Priority Tiers (highest → lowest):
+ *   P1: profile_clarification, intent_divergence  (red — interrupt anything)
+ *   P2: emotional_signal                           (amber — surface quickly)
+ *   P3: kb_answer                                  (blue — on question)
+ *   P4: script_gap                                 (green — helpful opening)
+ *   P5: field_gap                                  (gray — passive reminder)
  *
- * Suppression Rules:
- *   - Max 1 nudge displayed per 45 seconds (global cooldown)
- *   - Same type: suppress for 3 minutes after display
- *   - After dismiss: suppress type for 10 minutes
- *   - 3 consecutive dismissals of same type → disable for session
- *   - Queued candidates decay after 60 seconds if not displayed
+ * Suppression:
+ *   - Max 1 active card at a time (highest priority wins)
+ *   - 90s cooldown per type after dismiss (P1 exempt)
+ *   - 3 consecutive dismissals → disable type for session
+ *   - Queued candidates decay after 90s if not displayed
  */
 
 class NudgeQueue {
   constructor() {
-    this.queue = [];                // { type, text, source?, priority, addedAt }
+    this.queue = [];                  // { type, text, suggestion, reason?, priority, addedAt }
     this.suppressedUntil = new Map(); // type → timestamp
     this.dismissCounts = new Map();   // type → count this session
-    this.disabledTypes = new Set();   // disabled for entire session
+    this.disabledTypes = new Set();
 
     this.lastDisplayTime = 0;
 
-    // Timing constants
-    this.GLOBAL_COOLDOWN_MS    = 45 * 1000;       // 45s between any new nudge
-    this.TYPE_COOLDOWN_MS      = 3 * 60 * 1000;   // 3 min after same type shown
-    this.DISMISS_COOLDOWN_MS   = 10 * 60 * 1000;  // 10 min after dismiss
-    this.DECAY_MS              = 60 * 1000;        // candidates expire after 60s in queue
-    this.DISABLE_AFTER_N       = 3;                // disable type after N consecutive dismissals
+    this.GLOBAL_COOLDOWN_MS  = 30 * 1000;       // 30s between cards
+    this.TYPE_COOLDOWN_MS    = 90 * 1000;        // 90s after type shown
+    this.DISMISS_COOLDOWN_MS = 90 * 1000;        // 90s after dismiss (P1 exempt)
+    this.DECAY_MS            = 90 * 1000;        // candidates expire after 90s
+    this.DISABLE_AFTER_N     = 3;
   }
-
-  // ── Priority mapping ────────────────────────────────────────────────────────
 
   _priorityFor(type) {
-    if (['closing_cue', 'checklist_reminder'].includes(type))     return 4;
-    if (['kb_answer', 'objection_handler'].includes(type))        return 3;
-    if (['context_recall', 'sentiment_shift', 'goal_drift_alert'].includes(type)) return 2;
-    return 1; // silence_prompt and anything else
+    if (['profile_clarification', 'intent_divergence'].includes(type)) return 5; // P1 → highest number
+    if (type === 'emotional_signal')                                   return 4;
+    if (type === 'kb_answer')                                          return 3;
+    if (type === 'script_gap')                                         return 2;
+    return 1; // field_gap and anything else
   }
 
-  // ── Add a candidate nudge ───────────────────────────────────────────────────
-
   add(nudge) {
-    // nudge: { type, text, source? }
     if (!nudge.type || !nudge.text) return;
     if (this.disabledTypes.has(nudge.type)) return;
 
     nudge.priority = this._priorityFor(nudge.type);
     nudge.addedAt  = Date.now();
-
     this.queue.push(nudge);
-
-    // Keep sorted by priority desc so flush() is O(n) scan
     this.queue.sort((a, b) => b.priority - a.priority);
   }
-
-  // ── Flush: returns the best nudge that can be shown now, or null ────────────
 
   flush() {
     const now = Date.now();
 
-    // Global cooldown: don't show anything if too recent
-    if (now - this.lastDisplayTime < this.GLOBAL_COOLDOWN_MS) return null;
-
     // Expire decayed candidates
     this.queue = this.queue.filter(n => (now - n.addedAt) < this.DECAY_MS);
 
-    // Find first eligible candidate (highest priority that isn't suppressed)
+    // Find first eligible (highest priority, not suppressed)
     for (let i = 0; i < this.queue.length; i++) {
       const candidate = this.queue[i];
       const suppressed = this.suppressedUntil.get(candidate.type) || 0;
       if (now < suppressed) continue;
 
-      // Eligible — remove from queue and return
+      // Skip global cooldown only for P1 types
+      if (candidate.priority < 5 && now - this.lastDisplayTime < this.GLOBAL_COOLDOWN_MS) continue;
+
       this.queue.splice(i, 1);
       this.lastDisplayTime = now;
       this.suppressedUntil.set(candidate.type, now + this.TYPE_COOLDOWN_MS);
@@ -85,36 +73,25 @@ class NudgeQueue {
     return null;
   }
 
-  // ── Record a dismiss event ──────────────────────────────────────────────────
-
   dismiss(type) {
     const now = Date.now();
-    this.suppressedUntil.set(type, now + this.DISMISS_COOLDOWN_MS);
+    const isP1 = ['profile_clarification', 'intent_divergence'].includes(type);
+    if (!isP1) {
+      this.suppressedUntil.set(type, now + this.DISMISS_COOLDOWN_MS);
+    }
 
     const count = (this.dismissCounts.get(type) || 0) + 1;
     this.dismissCounts.set(type, count);
-
     if (count >= this.DISABLE_AFTER_N) {
       this.disabledTypes.add(type);
-      console.log(`[NudgeQueue] Type "${type}" disabled for session (${count} dismissals)`);
     }
   }
-
-  // ── Reset on meeting end ────────────────────────────────────────────────────
 
   reset() {
     this.queue = [];
     this.lastDisplayTime = 0;
-    // Keep suppressedUntil and dismissCounts — they persist within a session
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  queueLength() {
-    return this.queue.length;
-  }
-
-  isTypeEnabled(type) {
-    return !this.disabledTypes.has(type);
-  }
+  queueLength() { return this.queue.length; }
+  isTypeEnabled(type) { return !this.disabledTypes.has(type); }
 }

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Meeting Copilot",
-  "version": "1.0.0",
-  "description": "Real-time meeting assistant with RAG-powered suggestions",
+  "name": "Counsellor Assistant",
+  "version": "2.0.0",
+  "description": "Real-time AI assistant for Leap Scholar counsellors — Notion-connected student profiles, live field extraction, script guidance.",
 
   "permissions": [
     "tabCapture",
@@ -34,6 +34,6 @@
   },
 
   "action": {
-    "default_title": "Meeting Copilot"
+    "default_title": "Counsellor Assistant"
   }
 }

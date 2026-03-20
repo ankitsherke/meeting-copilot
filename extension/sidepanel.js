@@ -1,1465 +1,1180 @@
 /**
- * sidepanel.js — Side Panel UI Logic
- * v2: Theme engine, priority nudge queue, 8 nudge types, enhanced checklist,
- *     objection/silence/closing detectors, post-meeting report.
+ * sidepanel.js — Counsellor Assistant UI Logic
+ * 3-state: pre-call → in-call → post-call
  */
 
 const BACKEND_URL = 'https://meeting-copilot-iota.vercel.app';
-const INTERROGATIVE_STARTERS = /^(what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall)\b/i;
-const DEBOUNCE_MS = 3000;
-const NUDGE_FLUSH_INTERVAL_MS = 15000; // check queue every 15s
-const NUDGE_BACKEND_INTERVAL_MS = 60000; // backend nudge call every 60s
+const NUDGE_BACKEND_INTERVAL_MS = 45000;  // call /nudge every 45s
+const EXPECTED_CALL_DURATION_S  = 1800;   // default 30-min call
 
 // ── State ─────────────────────────────────────────────────────────────────────
+let appState = 'pre-call'; // 'pre-call' | 'in-call' | 'post-call'
+
+// Student
+let activeStudent = null;      // full profile from Notion
+let activeStudentPageId = null;
+
+// Recording
 let isRecording = false;
-let transcriptBuffer = []; // { text, timestamp, speaker }
+let transcriptBuffer = [];     // { text, speaker, timestamp }
 let currentInterim = { you: '', guest: '' };
-let queryDebounceTimer = null;
-let lastQueryTime = 0;
 let timerInterval = null;
 let recordingStart = null;
-let suggestionHistory = [];
 
-// Theme & checklist state
-let activeTheme = null;
-let checklistItems = []; // { id, label, description, autoDetectPatterns, priority, nudgeIfMissedAfter, covered, coveredAt }
+// Audio pipelines
+let tabAudioContext = null, tabWorkletNode = null, tabMediaStream = null, tabSocket = null;
+let micAudioContext = null, micWorkletNode = null, micMediaStream = null, micSocket = null;
 
-// Nudge engine
+// Nudge
 const nudgeQueue = new NudgeQueue();
-let nudgeFlushInterval = null;
 let nudgeBackendInterval = null;
-let nudgesUsedCount = 0;
-let nudgesDismissedCount = 0;
-let pinnedNudges = [];
-let closingCueFired = false;
+let nudgeCallElapsed = 0;
+let activeNudge = null;
+let queuedNudges = [];
 
-// Silence detection
-let silenceTimer = null;
-let lastSpeechTime = 0;
-let lastUserSpeechTime = 0;
+// Script tracking
+let scriptState = {};  // momentId → 'covered' | 'in_progress'
 
-// Post-meeting
-let meetingEndTime = null;
-
-// Guest context
-let activeGuest = null;  // loaded guest object from GuestContext
-
-// Tab audio capture state (guest speaker)
-let tabAudioContext = null;
-let tabWorkletNode = null;
-let tabMediaStream = null;
-let tabSocket = null;
-
-// Mic capture state (you)
-let micAudioContext = null;
-let micWorkletNode = null;
-let micMediaStream = null;
-let micSocket = null;
-
-// ── Nudge type metadata ───────────────────────────────────────────────────────
-const NUDGE_META = {
-  kb_answer:          { icon: '📚', label: 'KB Answer',     badge: 'nudge-badge-kb_answer' },
-  checklist_reminder: { icon: '☑️', label: 'Checklist',     badge: 'nudge-badge-checklist_reminder' },
-  objection_handler:  { icon: '🛡️', label: 'Objection',    badge: 'nudge-badge-objection_handler' },
-  silence_prompt:     { icon: '🤫', label: 'Silence',       badge: 'nudge-badge-silence_prompt' },
-  goal_drift_alert:   { icon: '🎯', label: 'Drift Alert',   badge: 'nudge-badge-goal_drift_alert' },
-  closing_cue:        { icon: '⏱️', label: 'Closing',      badge: 'nudge-badge-closing_cue' },
-  context_recall:     { icon: '🔄', label: 'Context',       badge: 'nudge-badge-context_recall' },
-  sentiment_shift:    { icon: '💭', label: 'Sentiment',     badge: 'nudge-badge-sentiment_shift' },
+// Field tracking
+const REQUIRED_FIELDS  = ['country', 'intake', 'budget', 'preferred_course', 'preferred_degree'];
+const OPTIONAL_FIELDS  = ['preferred_location', 'work_experience_months', 'backlogs', 'ielts_score', 'ug_score', 'gre_gmat_score', 'college_in_mind'];
+const FIELD_LABELS = {
+  country: 'Country', intake: 'Intake', budget: 'Budget',
+  preferred_course: 'Course', preferred_degree: 'Degree',
+  preferred_location: 'Location', work_experience_months: 'Work exp',
+  backlogs: 'Backlogs', ielts_score: 'IELTS', ug_score: 'UG score',
+  gre_gmat_score: 'GRE/GMAT', college_in_mind: 'Colleges',
 };
+let fieldState = {};  // fieldName → { value, status: 'empty'|'detected'|'confirmed' }
 
-// ── DOM Refs ──────────────────────────────────────────────────────────────────
-const startBtn         = document.getElementById('startBtn');
-const stopBtn          = document.getElementById('stopBtn');
-const manualBtn        = document.getElementById('manualBtn');
-const clearBtn         = document.getElementById('clearBtn');
-const copyBtn          = document.getElementById('copyBtn');
-const saveKeyBtn       = document.getElementById('saveKeyBtn');
-const historyToggle    = document.getElementById('historyToggle');
+// Post-call extraction data
+let extractionData = null;
 
-const transcriptEl     = document.getElementById('transcript');
-const suggestionSection = document.getElementById('suggestionSection');
-const suggestionText   = document.getElementById('suggestionText');
-const sourceLabel      = document.getElementById('sourceLabel');
-const spinner          = document.getElementById('spinner');
-const historySection   = document.getElementById('historySection');
-const historyList      = document.getElementById('historyList');
-const apiSetup         = document.getElementById('apiSetup');
-const deepgramKeyInput = document.getElementById('deepgramKeyInput');
-const statusDot        = document.getElementById('statusDot');
-const statusLabel      = document.getElementById('statusLabel');
-const timerEl          = document.getElementById('timer');
+// Notion credentials
+let notionApiKey = '';
+let notionDbId   = '';
+let deepgramKey  = '';
 
-// Meeting prep refs
-const meetingPrepToggle  = document.getElementById('meetingPrepToggle');
-const meetingPrepBody    = document.getElementById('meetingPrepBody');
-const agendaText         = document.getElementById('agendaText');
-const generateBriefBtn   = document.getElementById('generateBriefBtn');
-const prepInputArea      = document.getElementById('prepInputArea');
-const briefingCard       = document.getElementById('briefingCard');
-const briefingContent    = document.getElementById('briefingContent');
-const agendaChecklist    = document.getElementById('agendaChecklist');
-const meetingPrepSection = document.getElementById('meetingPrepSection');
-
-const micBanner   = document.getElementById('micBanner');
-const micAllowBtn = document.getElementById('micAllowBtn');
-
-// Nudge refs
-const nudgesSection = document.getElementById('nudgesSection');
-const nudgesList    = document.getElementById('nudgesList');
-const nudgeSpinner  = document.getElementById('nudgeSpinner');
-
-// Theme selector refs
-const themeSelector = document.getElementById('themeSelector');
-const themePills    = document.getElementById('themePills');
-
-// Post-meeting refs
-const postMeetingPanel  = document.getElementById('postMeetingPanel');
-const statDuration      = document.getElementById('statDuration');
-const statChecklist     = document.getElementById('statChecklist');
-const statNudgesUsed    = document.getElementById('statNudgesUsed');
-const generateReportBtn = document.getElementById('generateReportBtn');
-const reportOutput      = document.getElementById('reportOutput');
-const reportContent     = document.getElementById('reportContent');
-const copyReportBtn     = document.getElementById('copyReportBtn');
-
-// Settings refs
+// ── DOM refs ───────────────────────────────────────────────────────────────────
 const settingsToggle    = document.getElementById('settingsToggle');
 const settingsPanel     = document.getElementById('settingsPanel');
+const deepgramKeyInput  = document.getElementById('deepgramKeyInput');
+const saveKeyBtn        = document.getElementById('saveKeyBtn');
 const notionKeyInput    = document.getElementById('notionKeyInput');
 const saveNotionKeyBtn  = document.getElementById('saveNotionKeyBtn');
 const notionDbInput     = document.getElementById('notionDbInput');
 const saveNotionDbBtn   = document.getElementById('saveNotionDbBtn');
 const notionTestBtn     = document.getElementById('notionTestBtn');
-const notionCreateDbBtn = document.getElementById('notionCreateDbBtn');
 const notionStatus      = document.getElementById('notionStatus');
-const notionPushBtn     = document.getElementById('notionPushBtn');
-const notionPushStatus  = document.getElementById('notionPushStatus');
+const headerTitle       = document.getElementById('headerTitle');
+const statusDot         = document.getElementById('statusDot');
+const timer             = document.getElementById('timer');
+const stopBtn           = document.getElementById('stopBtn');
 
-// Guest context refs
-const guestNameInput    = document.getElementById('guestNameInput');
-const guestSuggestions  = document.getElementById('guestSuggestions');
-const guestContextCard  = document.getElementById('guestContextCard');
-const guestContextName  = document.getElementById('guestContextName');
-const guestContextMeta  = document.getElementById('guestContextMeta');
-const guestContextClear = document.getElementById('guestContextClear');
-const guestContextBody  = document.getElementById('guestContextBody');
-const guestSaveRow      = document.getElementById('guestSaveRow');
-const guestSaveInput    = document.getElementById('guestSaveInput');
-const saveGuestBtn      = document.getElementById('saveGuestBtn');
-const guestSaveConfirm  = document.getElementById('guestSaveConfirm');
+// State panels
+const statePreCall      = document.getElementById('statePreCall');
+const stateInCall       = document.getElementById('stateInCall');
+const statePostCall     = document.getElementById('statePostCall');
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-chrome.storage.local.get(['deepgramKey', 'activeThemeId', 'notionKey', 'notionDatabaseId'], (result) => {
-  if (result.deepgramKey) {
-    apiSetup.classList.add('hidden');
-  }
-  deepgramKeyInput.value    = result.deepgramKey || '';
-  notionKeyInput.value      = result.notionKey ? '••••••••' : '';
-  notionDbInput.value       = result.notionDatabaseId || '';
+// Pre-call
+const studentSearchInput  = document.getElementById('studentSearchInput');
+const studentSuggestions  = document.getElementById('studentSuggestions');
+const studentBriefCard    = document.getElementById('studentBriefCard');
+const noStudentPrompt     = document.getElementById('noStudentPrompt');
+const briefStudentName    = document.getElementById('briefStudentName');
+const briefSourceBadge    = document.getElementById('briefSourceBadge');
+const briefCallBadge      = document.getElementById('briefCallBadge');
+const briefInitialInterest = document.getElementById('briefInitialInterest');
+const readinessFill       = document.getElementById('readinessFill');
+const readinessScore      = document.getElementById('readinessScore');
+const readinessMissing    = document.getElementById('readinessMissing');
+const carryForwards       = document.getElementById('carryForwards');
+const carryItems          = document.getElementById('carryItems');
+const briefClearBtn       = document.getElementById('briefClearBtn');
+const generateBriefBtn    = document.getElementById('generateBriefBtn');
+const briefingCard        = document.getElementById('briefingCard');
+const briefingContent     = document.getElementById('briefingContent');
+const startBtn            = document.getElementById('startBtn');
 
-  const themeId = result.activeThemeId || 'counselling';
-  loadTheme(themeId);
-  renderThemeSelector();
+// In-call
+const assistCardWrap      = document.getElementById('assistCardWrap');
+const assistCardEmpty     = document.getElementById('assistCardEmpty');
+const assistCard          = document.getElementById('assistCard');
+const assistTypeBadge     = document.getElementById('assistTypeBadge');
+const assistExplanation   = document.getElementById('assistExplanation');
+const assistSuggestion    = document.getElementById('assistSuggestion');
+const assistPeekRow       = document.getElementById('assistPeekRow');
+const assistCopyBtn       = document.getElementById('assistCopyBtn');
+const assistDismissBtn    = document.getElementById('assistDismissBtn');
+const fieldPills          = document.getElementById('fieldPills');
+const scriptSections      = document.getElementById('scriptSections');
+const transcript          = document.getElementById('transcript');
+const clearTranscriptBtn  = document.getElementById('clearTranscriptBtn');
 
-  // Flush any pending Notion retry queue
-  if (result.notionKey && result.notionDatabaseId) {
-    NotionSync.flushRetryQueue(result.notionKey, result.notionDatabaseId).then(({ succeeded }) => {
-      if (succeeded > 0) console.log(`[Notion] Flushed ${succeeded} queued report(s)`);
-    });
-  }
-});
+// Post-call
+const postDuration        = document.getElementById('postDuration');
+const postStudentName     = document.getElementById('postStudentName');
+const extractionStatus    = document.getElementById('extractionStatus');
+const extractedFields     = document.getElementById('extractedFields');
+const qProfileSummary     = document.getElementById('qProfileSummary');
+const qMotivation         = document.getElementById('qMotivation');
+const qConstraints        = document.getElementById('qConstraints');
+const qEmotionalNotes     = document.getElementById('qEmotionalNotes');
+const openQuestions       = document.getElementById('openQuestions');
+const counsellorCommitments = document.getElementById('counsellorCommitments');
+const leadStatusSelect    = document.getElementById('leadStatusSelect');
+const generateReportBtn   = document.getElementById('generateReportBtn');
+const reportOutput        = document.getElementById('reportOutput');
+const reportContent       = document.getElementById('reportContent');
+const saveNotionBtn       = document.getElementById('saveNotionBtn');
+const notionSaveStatus    = document.getElementById('notionSaveStatus');
+const newCallBtn          = document.getElementById('newCallBtn');
 
-// ── Settings Panel ─────────────────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function init() {
+  const stored = await chrome.storage.local.get(['deepgramKey', 'notionKey', 'notionDbId']);
+  deepgramKey  = stored.deepgramKey  || '';
+  notionApiKey = stored.notionKey    || '';
+  notionDbId   = stored.notionDbId   || '';
 
+  deepgramKeyInput.value = deepgramKey  ? '••••••••' : '';
+  notionKeyInput.value   = notionApiKey ? '••••••••' : '';
+  notionDbInput.value    = notionDbId   || '';
+
+  initScriptState();
+  renderFieldPills();
+  renderScriptTracker();
+  setAppState('pre-call');
+}
+
+// ── App state ──────────────────────────────────────────────────────────────────
+function setAppState(state) {
+  appState = state;
+  statePreCall.classList.toggle('hidden', state !== 'pre-call');
+  stateInCall.classList.toggle('hidden', state !== 'in-call');
+  statePostCall.classList.toggle('hidden', state !== 'post-call');
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────────
 settingsToggle.addEventListener('click', () => {
   settingsPanel.classList.toggle('hidden');
 });
 
-saveKeyBtn.addEventListener('click', () => {
-  const key = deepgramKeyInput.value.trim();
-  if (!key) return;
-  chrome.storage.local.set({ deepgramKey: key }, () => {
-    apiSetup.classList.add('hidden');
-    settingsPanel.classList.add('hidden');
-  });
+saveKeyBtn.addEventListener('click', async () => {
+  const val = deepgramKeyInput.value.trim();
+  if (!val || val === '••••••••') return;
+  deepgramKey = val;
+  await chrome.storage.local.set({ deepgramKey: val });
+  deepgramKeyInput.value = '••••••••';
+  saveKeyBtn.textContent = '✓';
+  setTimeout(() => { saveKeyBtn.textContent = 'Save'; }, 1500);
 });
 
-saveNotionKeyBtn.addEventListener('click', () => {
-  const key = notionKeyInput.value.trim();
-  if (!key || key === '••••••••') return;
-  chrome.storage.local.set({ notionKey: key }, () => {
-    notionKeyInput.value = '••••••••';
-    _showNotionStatus('Notion key saved.', 'success');
-  });
+saveNotionKeyBtn.addEventListener('click', async () => {
+  const val = notionKeyInput.value.trim();
+  if (!val || val === '••••••••') return;
+  notionApiKey = val;
+  await chrome.storage.local.set({ notionKey: val });
+  notionKeyInput.value = '••••••••';
+  saveNotionKeyBtn.textContent = '✓';
+  setTimeout(() => { saveNotionKeyBtn.textContent = 'Save'; }, 1500);
 });
 
-saveNotionDbBtn.addEventListener('click', () => {
-  const dbId = notionDbInput.value.trim();
-  chrome.storage.local.set({ notionDatabaseId: dbId }, () => {
-    _showNotionStatus('Database ID saved.', 'success');
-  });
+saveNotionDbBtn.addEventListener('click', async () => {
+  const val = notionDbInput.value.trim();
+  notionDbId = val;
+  await chrome.storage.local.set({ notionDbId: val });
+  saveNotionDbBtn.textContent = '✓';
+  setTimeout(() => { saveNotionDbBtn.textContent = 'Save'; }, 1500);
 });
 
 notionTestBtn.addEventListener('click', async () => {
+  if (!notionApiKey) { showNotionStatus('No Notion key saved', false); return; }
   notionTestBtn.disabled = true;
   notionTestBtn.textContent = 'Testing...';
   try {
-    const key = await _getNotionKey();
-    if (!key) { _showNotionStatus('Enter and save your Notion key first.', 'error'); return; }
-    const name = await NotionSync.testConnection(key);
-    _showNotionStatus(`Connected as: ${name}`, 'success');
+    const name = await NotionSync.testConnection(notionApiKey);
+    showNotionStatus(`Connected as: ${name}`, true);
   } catch (e) {
-    _showNotionStatus(`Connection failed: ${e.message}`, 'error');
-  } finally {
-    notionTestBtn.disabled = false;
-    notionTestBtn.textContent = 'Test connection';
+    showNotionStatus(`Error: ${e.message}`, false);
   }
+  notionTestBtn.disabled = false;
+  notionTestBtn.textContent = 'Test connection';
 });
 
-notionCreateDbBtn.addEventListener('click', async () => {
-  const parentPageId = prompt('Paste the ID of an existing Notion page to create the database inside:');
-  if (!parentPageId) return;
-  notionCreateDbBtn.disabled = true;
-  notionCreateDbBtn.textContent = 'Creating...';
-  try {
-    const key = await _getNotionKey();
-    if (!key) { _showNotionStatus('Enter and save your Notion key first.', 'error'); return; }
-    const dbId = await NotionSync.createDatabase(key, parentPageId.trim());
-    notionDbInput.value = dbId;
-    chrome.storage.local.set({ notionDatabaseId: dbId });
-    _showNotionStatus('Database created! ID saved.', 'success');
-  } catch (e) {
-    _showNotionStatus(`Failed: ${e.message}`, 'error');
-  } finally {
-    notionCreateDbBtn.disabled = false;
-    notionCreateDbBtn.textContent = 'Auto-create DB';
-  }
-});
-
-function _showNotionStatus(msg, type) {
+function showNotionStatus(msg, ok) {
   notionStatus.textContent = msg;
-  notionStatus.className = `settings-notion-status ${type}`;
+  notionStatus.style.color = ok ? 'var(--c-script)' : 'var(--c-profile)';
   notionStatus.classList.remove('hidden');
   setTimeout(() => notionStatus.classList.add('hidden'), 4000);
 }
 
-async function _getNotionKey() {
-  return new Promise(resolve => {
-    chrome.storage.local.get('notionKey', d => resolve(d.notionKey || null));
-  });
-}
+// ── Student search ─────────────────────────────────────────────────────────────
+let searchDebounce = null;
 
-async function _getNotionDb() {
-  return new Promise(resolve => {
-    chrome.storage.local.get('notionDatabaseId', d => resolve(d.notionDatabaseId || null));
-  });
-}
+studentSearchInput.addEventListener('input', () => {
+  clearTimeout(searchDebounce);
+  const q = studentSearchInput.value.trim();
+  if (!q) { studentSuggestions.classList.add('hidden'); return; }
+  searchDebounce = setTimeout(() => searchStudents(q), 350);
+});
 
-// ── Notion Push (post-meeting) ─────────────────────────────────────────────────
-
-notionPushBtn.addEventListener('click', async () => {
-  notionPushBtn.disabled = true;
-  notionPushBtn.textContent = 'Pushing...';
-  notionPushStatus.classList.add('hidden');
-
-  try {
-    const key    = await _getNotionKey();
-    const dbId   = await _getNotionDb();
-    if (!key || !dbId) {
-      _showNotionPushStatus('Configure Notion in Settings (⚙) first.', 'error');
-      return;
-    }
-
-    const covered  = checklistItems.filter(i => i.covered).length;
-    const reportData = {
-      apiKey:        key,
-      databaseId:    dbId,
-      guestName:     activeGuest?.name || guestSaveInput.value.trim() || '',
-      themeName:     activeTheme?.name || 'General',
-      themeId:       activeTheme?.id || '',
-      date:          new Date().toISOString().slice(0, 10),
-      duration:      getMeetingDuration(),
-      goalAchieved:  document.getElementById('goalAchievedCheck')?.checked || false,
-      checklistScore:`${covered}/${checklistItems.length}`,
-      reportMarkdown: reportContent.textContent,
-    };
-
-    await NotionSync.pushReport(reportData);
-    _showNotionPushStatus('✓ Saved to Notion', 'success');
-    notionPushBtn.textContent = 'Pushed ✓';
-  } catch (e) {
-    // Enqueue for retry
-    try {
-      const key  = await _getNotionKey();
-      const dbId = await _getNotionDb();
-      if (key && dbId) {
-        const covered = checklistItems.filter(i => i.covered).length;
-        await NotionSync.enqueueRetry({
-          apiKey: key, databaseId: dbId,
-          guestName: activeGuest?.name || '',
-          themeName: activeTheme?.name || 'General',
-          themeId: activeTheme?.id || '',
-          date: new Date().toISOString().slice(0, 10),
-          duration: getMeetingDuration(),
-          goalAchieved: document.getElementById('goalAchievedCheck')?.checked || false,
-          checklistScore: `${covered}/${checklistItems.length}`,
-          reportMarkdown: reportContent.textContent,
-        });
-        _showNotionPushStatus('Push failed — queued for retry.', 'error');
-      }
-    } catch (_) {}
-    notionPushBtn.disabled = false;
-    notionPushBtn.textContent = 'Push to Notion';
-    console.error('[Notion] Push failed:', e);
+studentSearchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    studentSuggestions.classList.add('hidden');
+    studentSearchInput.blur();
   }
 });
 
-function _showNotionPushStatus(msg, type) {
-  notionPushStatus.textContent = msg;
-  notionPushStatus.className = `notion-push-status ${type}`;
-  notionPushStatus.classList.remove('hidden');
-}
-
-// ── Guest Context Engine ───────────────────────────────────────────────────────
-
-let guestSearchDebounce = null;
-
-guestNameInput.addEventListener('input', () => {
-  clearTimeout(guestSearchDebounce);
-  const q = guestNameInput.value.trim();
-  if (q.length < 2) {
-    guestSuggestions.classList.add('hidden');
-    guestSuggestions.innerHTML = '';
-    return;
-  }
-  guestSearchDebounce = setTimeout(async () => {
-    const matches = await GuestContext.search(q);
-    if (!matches.length) {
-      guestSuggestions.classList.add('hidden');
-      return;
-    }
-    guestSuggestions.innerHTML = matches.map(g => {
-      const lastMeeting = g.meetings[g.meetings.length - 1];
-      const meta = [g.company, g.role].filter(Boolean).join(' · ') || (lastMeeting ? lastMeeting.date : 'No meetings yet');
-      return `<div class="guest-suggestion-item" data-id="${g.id}">
-        <span class="guest-suggestion-name">${escapeHtml(g.name)}</span>
-        <span class="guest-suggestion-meta">${escapeHtml(meta)} · ${g.meetings.length} meeting${g.meetings.length !== 1 ? 's' : ''}</span>
-      </div>`;
-    }).join('');
-    guestSuggestions.classList.remove('hidden');
-
-    guestSuggestions.querySelectorAll('.guest-suggestion-item').forEach(item => {
-      item.addEventListener('click', async () => {
-        const guest = await GuestContext.getGuest(item.dataset.id);
-        if (guest) selectGuest(guest);
-        guestSuggestions.classList.add('hidden');
-      });
-    });
-  }, 300);
-});
-
-// Hide suggestions when clicking outside
 document.addEventListener('click', (e) => {
-  if (!guestNameInput.contains(e.target) && !guestSuggestions.contains(e.target)) {
-    guestSuggestions.classList.add('hidden');
+  if (!studentSuggestions.contains(e.target) && e.target !== studentSearchInput) {
+    studentSuggestions.classList.add('hidden');
   }
 });
 
-guestContextClear.addEventListener('click', () => {
-  activeGuest = null;
-  guestNameInput.value = '';
-  guestContextCard.classList.add('hidden');
-  guestContextBody.innerHTML = '';
-});
-
-function selectGuest(guest) {
-  activeGuest = guest;
-  guestNameInput.value = guest.name;
-  guestContextName.textContent = guest.name;
-
-  const metaParts = [guest.company, guest.role].filter(Boolean);
-  guestContextMeta.textContent = metaParts.length ? metaParts.join(' · ') : `${guest.meetings.length} past meeting${guest.meetings.length !== 1 ? 's' : ''}`;
-
-  renderGuestHistory(guest);
-  guestContextCard.classList.remove('hidden');
-
-  // Pre-fill guest save input in post-meeting panel
-  guestSaveInput.value = guest.name;
-}
-
-function renderGuestHistory(guest) {
-  if (!guest.meetings.length) {
-    guestContextBody.innerHTML = '<p style="font-size:12px;color:#6b7280;margin:0">No past meetings recorded.</p>';
+async function searchStudents(q) {
+  if (!notionApiKey || !notionDbId) {
+    studentSuggestions.innerHTML = '<div class="suggestion-item"><div class="suggestion-item-name" style="color:var(--text-3)">Configure Notion in Settings first</div></div>';
+    studentSuggestions.classList.remove('hidden');
     return;
   }
-
-  // Show last 3 meetings, most recent first
-  const recent = [...guest.meetings].reverse().slice(0, 3);
-  guestContextBody.innerHTML = recent.map(m => {
-    const goalBadge = m.goalAchieved
-      ? '<span class="guest-past-badge">Goal ✓</span>'
-      : '<span class="guest-past-badge missed">Goal ✗</span>';
-    const actionsHtml = m.actionItems && m.actionItems.length
-      ? `<div class="guest-past-actions">Open actions: ${escapeHtml(m.actionItems.slice(0, 2).join('; '))}</div>`
-      : '';
-    return `<div class="guest-past-meeting">
-      <div class="guest-past-meeting-header">
-        <span class="guest-past-date">${m.date} · ${m.theme || 'General'} · ${m.duration || '—'}</span>
-        ${goalBadge}
-      </div>
-      ${m.summary ? `<div class="guest-past-summary">${escapeHtml(m.summary)}</div>` : ''}
-      ${actionsHtml}
-    </div>`;
-  }).join('');
+  try {
+    const results = await NotionSync.searchStudents(q, notionApiKey, notionDbId);
+    renderSuggestions(results);
+  } catch (e) {
+    studentSuggestions.innerHTML = `<div class="suggestion-item"><div class="suggestion-item-name" style="color:var(--c-profile)">Search error: ${e.message}</div></div>`;
+    studentSuggestions.classList.remove('hidden');
+  }
 }
 
-// Save guest after meeting
-saveGuestBtn.addEventListener('click', async () => {
-  const name = guestSaveInput.value.trim();
-  if (!name) return;
-
-  const duration = getMeetingDuration();
-  const covered  = checklistItems.filter(i => i.covered).length;
-  const goalAchieved = document.getElementById('goalAchievedCheck')?.checked || false;
-  const summary = reportContent.textContent.slice(0, 400) || agendaText.value.slice(0, 400);
-
-  // Extract action items from report text (lines starting with bullet patterns)
-  const actionItems = (reportContent.textContent.match(/^\*\*\[.*?\]\*\*.*$/gm) || []).slice(0, 5);
-
-  const guest = await GuestContext.getOrCreate(name);
-  await GuestContext.addMeeting(guest.id, {
-    theme: activeTheme?.id || '',
-    duration,
-    goalAchieved,
-    summary,
-    actionItems,
-    checklistScore: `${covered}/${checklistItems.length}`,
-  });
-
-  guestSaveInput.disabled = true;
-  saveGuestBtn.disabled = true;
-  guestSaveConfirm.classList.remove('hidden');
-  activeGuest = await GuestContext.getGuest(guest.id);
-});
-
-// ── Theme Engine ──────────────────────────────────────────────────────────────
-function loadTheme(themeId) {
-  activeTheme = getThemeById(themeId);
-  initChecklistFromTheme();
-  renderAgendaChecklist();
-}
-
-function renderThemeSelector() {
-  themePills.innerHTML = BUILT_IN_THEMES.map(t => `
-    <button class="theme-pill ${t.id === activeTheme?.id ? 'active' : ''}" data-theme="${t.id}">
-      <span class="theme-pill-icon">${t.icon}</span>
-      <span>${t.name}</span>
-    </button>
+function renderSuggestions(results) {
+  if (!results.length) {
+    studentSuggestions.innerHTML = '<div class="suggestion-item"><div class="suggestion-item-name" style="color:var(--text-3)">No students found</div></div>';
+    studentSuggestions.classList.remove('hidden');
+    return;
+  }
+  studentSuggestions.innerHTML = results.map(r => `
+    <div class="suggestion-item" data-page-id="${r.pageId}">
+      <div class="suggestion-item-name">${r.name}</div>
+      <div class="suggestion-item-meta">${r.source || 'Unknown source'} · ${r.leadStatus} · Call ${r.callCount}</div>
+    </div>
   `).join('');
-
-  themePills.querySelectorAll('.theme-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const themeId = btn.dataset.theme;
-      chrome.storage.local.set({ activeThemeId: themeId });
-      loadTheme(themeId);
-      renderThemeSelector();
-    });
+  studentSuggestions.querySelectorAll('.suggestion-item').forEach(el => {
+    el.addEventListener('click', () => loadStudent(el.dataset.pageId));
   });
+  studentSuggestions.classList.remove('hidden');
 }
 
-function initChecklistFromTheme() {
-  if (!activeTheme) return;
-  checklistItems = activeTheme.checklist.map(item => ({
-    ...item,
-    covered: false,
-    coveredAt: null
-  }));
+async function loadStudent(pageId) {
+  studentSuggestions.classList.add('hidden');
+  studentSearchInput.value = 'Loading...';
+  studentSearchInput.disabled = true;
+  try {
+    const profile = await NotionSync.getStudentProfile(pageId, notionApiKey);
+    activeStudent = profile;
+    activeStudentPageId = pageId;
+    studentSearchInput.value = profile.name || '';
+    studentSearchInput.disabled = false;
+    renderStudentBriefCard(profile);
+  } catch (e) {
+    studentSearchInput.value = '';
+    studentSearchInput.disabled = false;
+    studentSearchInput.placeholder = `Error loading student: ${e.message}`;
+  }
 }
 
-// ── Button Handlers ───────────────────────────────────────────────────────────
-startBtn.addEventListener('click', async () => {
-  const key = deepgramKeyInput.value.trim();
-  if (!key) {
-    settingsPanel.classList.remove('hidden');
-    deepgramKeyInput.focus();
-    return;
+function renderStudentBriefCard(profile) {
+  noStudentPrompt.classList.add('hidden');
+  studentBriefCard.classList.remove('hidden');
+
+  briefStudentName.textContent = profile.name || 'Unknown student';
+  briefSourceBadge.textContent = profile.source_platform || 'Unknown';
+  briefSourceBadge.classList.toggle('hidden', !profile.source_platform);
+
+  const callNum = (profile.call_count || 0) + 1;
+  briefCallBadge.textContent = `Call ${callNum}`;
+
+  briefInitialInterest.textContent = profile.initial_interest || '';
+  briefInitialInterest.classList.toggle('hidden', !profile.initial_interest);
+
+  // Readiness bar
+  const requiredDone = REQUIRED_FIELDS.filter(f => {
+    const v = profile[f];
+    return v && (Array.isArray(v) ? v.length > 0 : true);
+  });
+  const pct = Math.round(requiredDone.length / REQUIRED_FIELDS.length * 100);
+  readinessFill.style.width = pct + '%';
+  readinessScore.textContent = `${requiredDone.length}/5 fields`;
+  const missing = REQUIRED_FIELDS.filter(f => {
+    const v = profile[f];
+    return !v || (Array.isArray(v) && v.length === 0);
+  });
+  readinessMissing.textContent = missing.length ? `Missing: ${missing.map(f => FIELD_LABELS[f]).join(', ')}` : '';
+
+  // Carry-forwards (Call 2+)
+  if (callNum >= 2 && (profile.open_questions || profile.counsellor_commitments || profile.emotional_notes)) {
+    carryForwards.classList.remove('hidden');
+    const items = [];
+    if (profile.open_questions)        items.push({ text: profile.open_questions, type: '❓' });
+    if (profile.counsellor_commitments) items.push({ text: profile.counsellor_commitments, type: '📋' });
+    if (profile.emotional_notes)        items.push({ text: profile.emotional_notes, type: '💬' });
+    carryItems.innerHTML = items.map(i => `
+      <div class="carry-item">
+        <input type="checkbox" />
+        <span class="carry-item-text">${i.type} ${escapeHtml(i.text)}</span>
+      </div>
+    `).join('');
+  } else {
+    carryForwards.classList.add('hidden');
   }
-  chrome.storage.local.set({ deepgramKey: key });
-  await startListening(key);
+
+  // Pre-populate field state from existing profile
+  initFieldStateFromProfile(profile);
+  renderFieldPills();
+}
+
+briefClearBtn.addEventListener('click', () => {
+  activeStudent = null;
+  activeStudentPageId = null;
+  studentSearchInput.value = '';
+  studentBriefCard.classList.add('hidden');
+  noStudentPrompt.classList.remove('hidden');
+  briefingCard.classList.add('hidden');
+  resetFieldState();
+  renderFieldPills();
 });
 
-stopBtn.addEventListener('click', stopListening);
+// ── Brief generation ───────────────────────────────────────────────────────────
+generateBriefBtn.addEventListener('click', async () => {
+  if (!activeStudent) return;
+  generateBriefBtn.textContent = '⟳ Generating...';
+  generateBriefBtn.classList.add('loading');
 
-manualBtn.addEventListener('click', () => {
-  const recentText = getRecentTranscript();
-  if (recentText) triggerQuery(recentText, recentText);
-});
-
-clearBtn.addEventListener('click', () => {
-  transcriptBuffer = [];
-  currentInterim = { you: '', guest: '' };
-  transcriptEl.innerHTML = '<p class="placeholder-text">Transcript will appear here when you start listening...</p>';
-});
-
-copyBtn.addEventListener('click', () => {
-  const text = suggestionText.textContent;
-  if (text) {
-    navigator.clipboard.writeText(text).then(() => {
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => (copyBtn.textContent = 'Copy'), 1500);
-    });
-  }
-});
-
-// (saveKeyBtn handler is in the Settings Panel section above)
-
-micAllowBtn.addEventListener('click', async () => {
-  const key = deepgramKeyInput.value.trim();
-  if (key) {
-    micAllowBtn.disabled = true;
-    await startMicCapture(key);
-    micAllowBtn.disabled = false;
-  }
-});
-
-historyToggle.addEventListener('click', () => {
-  historyList.classList.toggle('hidden');
-  historyToggle.textContent = historyList.classList.contains('hidden') ? '▼' : '▲';
-});
-
-meetingPrepToggle.addEventListener('click', () => {
-  meetingPrepBody.classList.toggle('hidden');
-  meetingPrepToggle.textContent = meetingPrepBody.classList.contains('hidden') ? 'Brief ▾' : 'Brief ▴';
-});
-
-generateBriefBtn.addEventListener('click', () => {
-  const agenda = agendaText.value.trim();
-  if (agenda) triggerBrief(agenda);
-});
-
-copyReportBtn.addEventListener('click', () => {
-  const text = reportContent.textContent;
-  if (text) {
-    navigator.clipboard.writeText(text).then(() => {
-      copyReportBtn.textContent = 'Copied!';
-      setTimeout(() => (copyReportBtn.textContent = 'Copy Report'), 1500);
-    });
-  }
-});
-
-generateReportBtn.addEventListener('click', () => {
-  triggerReport();
-});
-
-// ── Start / Stop ──────────────────────────────────────────────────────────────
-async function startListening(deepgramKey) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) {
-    setStatus('error', 'No active tab found');
-    return;
-  }
+  const agenda = `Student: ${activeStudent.name}\nInitial interest: ${activeStudent.initial_interest || ''}\nCall number: ${(activeStudent.call_count || 0) + 1}`;
 
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'START_CAPTURE',
-      tabId: tab.id
-    });
+    const data = await fetch(`${BACKEND_URL}/brief`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agenda, student_context: activeStudent }),
+    }).then(r => r.json());
 
-    if (response?.error) {
-      setStatus('error', response.error);
-      return;
-    }
-
-    isRecording = true;
-    closingCueFired = false;
-    nudgesUsedCount = 0;
-    nudgesDismissedCount = 0;
-    nudgeQueue.reset();
-
-    startBtn.classList.add('hidden');
-    stopBtn.classList.remove('hidden');
-    manualBtn.classList.remove('hidden');
-
-    prepInputArea.classList.add('hidden');
-    meetingPrepSection.classList.add('hidden');
-    themeSelector.classList.add('hidden');
-    postMeetingPanel.classList.add('hidden');
-
-    nudgesSection.classList.remove('hidden');
-    if (checklistItems.length > 0) agendaChecklist.classList.remove('hidden');
-
-    if (response.streamId) {
-      startTabCapture(response.streamId, response.deepgramKey || deepgramKey);
-    }
-
-    startMicCapture(deepgramKey);
-
-    recordingStart = Date.now();
-    lastSpeechTime = Date.now();
-    timerInterval = setInterval(updateTimer, 1000);
-
-    // Start nudge flush loop (checks queue every 15s)
-    nudgeFlushInterval = setInterval(flushNudgeQueue, NUDGE_FLUSH_INTERVAL_MS);
-
-    // Start backend nudge refresh loop
-    if (checklistItems.length > 0 || activeTheme) {
-      nudgeBackendInterval = setInterval(refreshNudges, NUDGE_BACKEND_INTERVAL_MS);
-      // First backend nudge call after 30s
-      setTimeout(refreshNudges, 30000);
-    }
-
-    // Start silence detector
-    startSilenceDetector();
-
-    // Start periodic local checks (checklist reminders, closing cue)
-    nudgeBackendInterval && clearInterval(nudgeBackendInterval);
-    nudgeBackendInterval = setInterval(() => {
-      refreshNudges();
-      checkChecklistReminders();
-      checkClosingCue();
-    }, NUDGE_BACKEND_INTERVAL_MS);
-
+    renderBriefCard(data);
   } catch (e) {
-    setStatus('error', e.message);
+    briefingContent.innerHTML = `<span style="color:var(--c-profile)">Error: ${e.message}</span>`;
+    briefingCard.classList.remove('hidden');
+  }
+
+  generateBriefBtn.textContent = 'Generate brief';
+  generateBriefBtn.classList.remove('loading');
+});
+
+function renderBriefCard(data) {
+  let html = '';
+
+  if (data.key_facts?.length) {
+    html += `<div class="brief-section-title">Key Facts</div>`;
+    html += data.key_facts.map(f => `<div class="brief-bullet">• ${escapeHtml(f)}</div>`).join('');
+  }
+  if (data.likely_questions?.length) {
+    html += `<div class="brief-section-title">Likely Questions</div>`;
+    html += data.likely_questions.map(q => `
+      <div class="brief-qa">
+        <div class="brief-q">Q: ${escapeHtml(q.q)}</div>
+        <div class="brief-a">A: ${escapeHtml(q.a)}</div>
+      </div>
+    `).join('');
+  }
+  if (data.carry_forwards?.length) {
+    html += `<div class="brief-section-title">From Last Call</div>`;
+    html += data.carry_forwards.map(f => `<div class="brief-bullet">⚠ ${escapeHtml(f)}</div>`).join('');
+  }
+
+  briefingContent.innerHTML = html;
+  briefingCard.classList.remove('hidden');
+}
+
+// ── Field state ────────────────────────────────────────────────────────────────
+function resetFieldState() {
+  fieldState = {};
+  [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].forEach(f => {
+    fieldState[f] = { value: null, status: 'empty' };
+  });
+}
+
+function initFieldStateFromProfile(profile) {
+  resetFieldState();
+  [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].forEach(f => {
+    const v = profile[f];
+    if (v && (Array.isArray(v) ? v.length > 0 : true)) {
+      const display = Array.isArray(v) ? v.join(', ') : String(v);
+      fieldState[f] = { value: display, status: 'confirmed' };
+    }
+  });
+}
+
+function initScriptState() {
+  scriptState = {};
+  const theme = getCounsellingTheme();
+  theme.scriptMoments.forEach(m => { scriptState[m.id] = 'pending'; });
+}
+
+function applyExtractedFields(fields) {
+  if (!fields || typeof fields !== 'object') return;
+  let anyNew = false;
+  for (const [key, info] of Object.entries(fields)) {
+    if (!fieldState[key]) continue;
+    if (fieldState[key].status === 'confirmed') continue; // never overwrite confirmed
+    if (info.confidence === 'low') continue;
+    fieldState[key] = { value: info.value, status: 'detected' };
+    anyNew = true;
+  }
+  if (anyNew) renderFieldPills();
+}
+
+function applyScriptStateUpdate(update) {
+  if (!update || typeof update !== 'object') return;
+  let changed = false;
+  for (const [id, status] of Object.entries(update)) {
+    if (scriptState[id] !== 'covered') {
+      scriptState[id] = status;
+      changed = true;
+    }
+  }
+  if (changed) renderScriptTracker();
+}
+
+// ── Render field pills ─────────────────────────────────────────────────────────
+function renderFieldPills() {
+  if (!fieldPills) return;
+  const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+  fieldPills.innerHTML = allFields.map(f => {
+    const s = fieldState[f] || { value: null, status: 'empty' };
+    const label = FIELD_LABELS[f];
+    let cls = 'field-pill ';
+    let content = escapeHtml(label);
+    if (s.status === 'empty') {
+      cls += 'state-empty';
+    } else if (s.status === 'detected') {
+      cls += 'state-detected';
+      content += `<span class="field-pill-value"> ${escapeHtml(s.value)}</span><span class="field-pill-q">?</span>`;
+    } else {
+      cls += 'state-confirmed';
+      content += `<span class="field-pill-value"> ${escapeHtml(String(s.value))}</span>`;
+    }
+    return `<div class="${cls}" data-field="${f}">${content}</div>`;
+  }).join('');
+
+  fieldPills.querySelectorAll('.field-pill').forEach(pill => {
+    pill.addEventListener('click', () => confirmFieldPill(pill));
+  });
+}
+
+function confirmFieldPill(pill) {
+  const f = pill.dataset.field;
+  if (!fieldState[f]) return;
+  const cur = fieldState[f];
+  if (cur.status === 'detected') {
+    // Confirm the detected value
+    fieldState[f] = { value: cur.value, status: 'confirmed' };
+    renderFieldPills();
   }
 }
 
-async function stopListening() {
+// ── Render script tracker ──────────────────────────────────────────────────────
+function renderScriptTracker() {
+  if (!scriptSections) return;
+  const theme = getCounsellingTheme();
+  const sections = {};
+  theme.scriptMoments.forEach(m => {
+    if (!sections[m.section]) sections[m.section] = [];
+    sections[m.section].push(m);
+  });
+
+  scriptSections.innerHTML = Object.entries(sections).map(([sectionName, moments]) => `
+    <div class="script-section-row">
+      <span class="script-section-name">${sectionName}</span>
+      <div class="script-dots">
+        ${moments.map(m => {
+          const state = scriptState[m.id] || 'pending';
+          const cls = state === 'covered' ? 'covered' : (state === 'in_progress' ? 'in-progress' : '');
+          return `<div class="script-dot ${cls}" title="${m.label}"></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Assist card ────────────────────────────────────────────────────────────────
+const TYPE_LABELS = {
+  profile_clarification: 'Profile mismatch',
+  intent_divergence:     'Intent divergence',
+  emotional_signal:      'Emotional signal',
+  kb_answer:             'KB answer',
+  script_gap:            'Script nudge',
+  field_gap:             'Field gap',
+};
+
+function showAssistCard(nudge) {
+  activeNudge = nudge;
+  assistCardEmpty.classList.add('hidden');
+  assistCard.classList.remove('hidden');
+
+  assistCard.className = `assist-card type-${nudge.type}`;
+  assistTypeBadge.textContent = TYPE_LABELS[nudge.type] || nudge.type;
+  assistExplanation.textContent = nudge.text || '';
+  assistSuggestion.textContent  = nudge.suggestion || '';
+
+  // Peek row: show queued items
+  assistPeekRow.innerHTML = queuedNudges.slice(0, 3).map(n =>
+    `<span class="peek-badge">${TYPE_LABELS[n.type] || n.type}</span>`
+  ).join('');
+}
+
+function hideAssistCard() {
+  activeNudge = null;
+  assistCard.classList.add('hidden');
+  assistCardEmpty.classList.remove('hidden');
+  assistPeekRow.innerHTML = '';
+}
+
+assistCopyBtn.addEventListener('click', () => {
+  if (activeNudge?.suggestion) {
+    navigator.clipboard.writeText(activeNudge.suggestion).catch(() => {});
+    assistCopyBtn.textContent = '✓';
+    setTimeout(() => { assistCopyBtn.textContent = '⎘'; }, 1500);
+  }
+});
+
+assistDismissBtn.addEventListener('click', () => {
+  if (activeNudge) {
+    nudgeQueue.dismiss(activeNudge.type);
+    queuedNudges = queuedNudges.filter(n => n !== activeNudge);
+    activeNudge = null;
+  }
+  // Show next queued nudge
+  const next = nudgeQueue.flush();
+  if (next) {
+    showAssistCard(next);
+  } else {
+    hideAssistCard();
+  }
+});
+
+// ── Start / stop recording ─────────────────────────────────────────────────────
+startBtn.addEventListener('click', async () => {
+  if (!deepgramKey) {
+    settingsPanel.classList.remove('hidden');
+    return;
+  }
+  await startRecording();
+});
+
+stopBtn.addEventListener('click', stopRecording);
+
+async function startRecording() {
+  isRecording = true;
+  recordingStart = Date.now();
+  transcriptBuffer = [];
+  nudgeCallElapsed = 0;
+
+  // Reset nudge/script/field state
+  nudgeQueue.reset();
+  queuedNudges = [];
+  activeNudge = null;
+  initScriptState();
+  if (!activeStudent) {
+    resetFieldState();
+  }
+
+  // UI transition → in-call
+  setAppState('in-call');
+  hideAssistCard();
+  renderScriptTracker();
+  renderFieldPills();
+  clearTranscript();
+
+  statusDot.classList.add('recording');
+  stopBtn.classList.remove('hidden');
+  timer.classList.remove('hidden');
+  headerTitle.textContent = activeStudent ? activeStudent.name : 'Counsellor Assistant';
+
+  // Timer
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
+    nudgeCallElapsed = elapsed;
+    const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    timer.textContent = `${m}:${s}`;
+  }, 1000);
+
+  // Start Deepgram (tab audio = guest, mic = counsellor)
+  try {
+    await startTabCapture();
+  } catch (e) {
+    console.warn('Tab capture failed:', e.message);
+  }
+  try {
+    await startMicCapture();
+  } catch (e) {
+    console.warn('Mic capture failed:', e.message);
+  }
+
+  // Nudge polling
+  nudgeBackendInterval = setInterval(callNudgeBackend, NUDGE_BACKEND_INTERVAL_MS);
+}
+
+function stopRecording() {
   isRecording = false;
-  meetingEndTime = Date.now();
-
-  await chrome.runtime.sendMessage({ type: 'STOP_CAPTURE' });
-
-  stopBtn.classList.add('hidden');
-  manualBtn.classList.add('hidden');
-  startBtn.classList.remove('hidden');
-
-  prepInputArea.classList.remove('hidden');
-  meetingPrepSection.classList.remove('hidden');
-  themeSelector.classList.remove('hidden');
-
-  nudgesSection.classList.add('hidden');
-  nudgesList.innerHTML = '<p class="nudge-empty">Listening for conversation context...</p>';
 
   clearInterval(timerInterval);
-  clearInterval(nudgeFlushInterval);
   clearInterval(nudgeBackendInterval);
-  nudgeFlushInterval = null;
-  nudgeBackendInterval = null;
-
-  stopSilenceDetector();
-
-  timerEl.textContent = '';
-  setStatus('idle', 'Stopped');
 
   stopTabCapture();
   stopMicCapture();
 
-  // Show post-meeting panel
-  showPostMeetingPanel();
+  statusDot.classList.remove('recording');
+  stopBtn.classList.add('hidden');
+  timer.classList.add('hidden');
+
+  const durationMs = Date.now() - (recordingStart || Date.now());
+  const durationStr = formatDuration(durationMs);
+
+  transitionToPostCall(durationStr);
 }
 
-// ── Tab Capture (guest speaker) ───────────────────────────────────────────────
-async function startTabCapture(streamId, deepgramKey) {
-  try {
-    tabMediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
-      video: false
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}:${String(m % 60).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  return `${m}:${String(s % 60).padStart(2,'0')}`;
+}
+
+// ── Tab capture (guest audio) ──────────────────────────────────────────────────
+async function startTabCapture() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error('No active tab');
+
+  const streamId = await new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: 'GET_TAB_STREAM_ID', tabId: tab.id }, (resp) => {
+      if (chrome.runtime.lastError || !resp?.streamId) reject(new Error('No stream ID'));
+      else resolve(resp.streamId);
     });
-  } catch (e) {
-    console.error('[SP] Tab capture failed:', e.name, e.message);
-    setStatus('error', `Tab capture failed: ${e.message}`);
-    return;
-  }
+  });
 
-  tabAudioContext = new AudioContext();
-  await tabAudioContext.audioWorklet.addModule(chrome.runtime.getURL('audio-processor.js'));
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: streamId,
+      }
+    },
+    video: false,
+  });
 
-  const source = tabAudioContext.createMediaStreamSource(tabMediaStream);
+  tabMediaStream = stream;
+  tabAudioContext = new AudioContext({ sampleRate: 16000 });
+  await tabAudioContext.audioWorklet.addModule('audio-processor.js');
+  const source = tabAudioContext.createMediaStreamSource(stream);
   tabWorkletNode = new AudioWorkletNode(tabAudioContext, 'pcm-processor');
-
-  // Side panel is a visible page — destination routes to real speakers
-  source.connect(tabAudioContext.destination);
   source.connect(tabWorkletNode);
 
-  const silentDest = tabAudioContext.createMediaStreamDestination();
-  tabWorkletNode.connect(silentDest);
-
-  const url = `wss://api.deepgram.com/v1/listen`
-    + `?model=nova-2&encoding=linear16`
-    + `&sample_rate=${tabAudioContext.sampleRate}`
-    + `&channels=1&smart_format=true&interim_results=true`;
-
-  tabSocket = new WebSocket(url, ['token', deepgramKey]);
-
-  tabWorkletNode.port.onmessage = (e) => {
-    if (tabSocket && tabSocket.readyState === WebSocket.OPEN) tabSocket.send(e.data);
+  tabSocket = new WebSocket(
+    `wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1&smart_format=true&token=${deepgramKey}`
+  );
+  tabSocket.binaryType = 'arraybuffer';
+  tabSocket.onopen = () => {
+    tabWorkletNode.port.onmessage = (e) => {
+      if (tabSocket.readyState === WebSocket.OPEN) tabSocket.send(e.data);
+    };
   };
-
-  tabSocket.onopen  = () => setStatus('recording', 'Listening...');
-  tabSocket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      const alt = data?.channel?.alternatives?.[0];
-      if (!alt?.transcript?.trim()) return;
-      handleTranscript(alt.transcript.trim(), data.is_final === true, 'guest');
-    } catch (_) {}
-  };
-  tabSocket.onerror = (e) => console.error('[SP] Tab WS error:', e);
-  tabSocket.onclose = (e) => { if (e.code !== 1005) console.warn('[SP] Tab WS closed:', e.code); };
+  tabSocket.onmessage = (e) => handleDeepgramMessage(e, 'guest');
+  tabSocket.onerror = console.warn;
 }
 
 function stopTabCapture() {
-  tabWorkletNode?.port.postMessage('stop');
+  tabSocket?.close();
   tabWorkletNode?.disconnect();
-  tabWorkletNode = null;
+  tabAudioContext?.close();
   tabMediaStream?.getTracks().forEach(t => t.stop());
-  tabMediaStream = null;
-  if (tabSocket) { tabSocket.close(); tabSocket = null; }
-  if (tabAudioContext) { tabAudioContext.close(); tabAudioContext = null; }
+  tabSocket = null; tabWorkletNode = null; tabAudioContext = null; tabMediaStream = null;
 }
 
-// ── Mic Capture (you) ─────────────────────────────────────────────────────────
-async function startMicCapture(deepgramKey) {
-  try {
-    micMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    micBanner.classList.add('hidden');
-  } catch (e) {
-    console.warn('[SP] Mic access denied:', e.name);
-    if (tabSocket) {
-      setStatus('recording', 'Listening... (mic denied — guest only)');
-    } else {
-      micBanner.classList.remove('hidden');
-    }
-    return;
-  }
-
-  micAudioContext = new AudioContext();
-  await micAudioContext.audioWorklet.addModule(chrome.runtime.getURL('audio-processor.js'));
-
-  const source = micAudioContext.createMediaStreamSource(micMediaStream);
+// ── Mic capture (counsellor audio) ────────────────────────────────────────────
+async function startMicCapture() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  micMediaStream = stream;
+  micAudioContext = new AudioContext({ sampleRate: 16000 });
+  await micAudioContext.audioWorklet.addModule('audio-processor.js');
+  const source = micAudioContext.createMediaStreamSource(stream);
   micWorkletNode = new AudioWorkletNode(micAudioContext, 'pcm-processor');
-
-  const silentDest = micAudioContext.createMediaStreamDestination();
   source.connect(micWorkletNode);
-  micWorkletNode.connect(silentDest);
 
-  const url = `wss://api.deepgram.com/v1/listen`
-    + `?model=nova-2&encoding=linear16`
-    + `&sample_rate=${micAudioContext.sampleRate}`
-    + `&channels=1&smart_format=true&interim_results=true`;
-
-  micSocket = new WebSocket(url, ['token', deepgramKey]);
-
-  micWorkletNode.port.onmessage = (e) => {
-    if (micSocket && micSocket.readyState === WebSocket.OPEN) micSocket.send(e.data);
+  micSocket = new WebSocket(
+    `wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1&smart_format=true&token=${deepgramKey}`
+  );
+  micSocket.binaryType = 'arraybuffer';
+  micSocket.onopen = () => {
+    micWorkletNode.port.onmessage = (e) => {
+      if (micSocket.readyState === WebSocket.OPEN) micSocket.send(e.data);
+    };
   };
-
-  micSocket.onopen = () => micBanner.classList.add('hidden');
-  micSocket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      const alt = data?.channel?.alternatives?.[0];
-      if (!alt?.transcript?.trim()) return;
-      handleTranscript(alt.transcript.trim(), data.is_final === true, 'you');
-    } catch (_) {}
-  };
-  micSocket.onerror = (e) => console.error('[SP] Mic WS error:', e);
-  micSocket.onclose = (e) => { if (e.code !== 1005) console.warn('[SP] Mic WS closed:', e.code); };
+  micSocket.onmessage = (e) => handleDeepgramMessage(e, 'you');
+  micSocket.onerror = console.warn;
 }
 
 function stopMicCapture() {
-  micWorkletNode?.port.postMessage('stop');
+  micSocket?.close();
   micWorkletNode?.disconnect();
-  micWorkletNode = null;
+  micAudioContext?.close();
   micMediaStream?.getTracks().forEach(t => t.stop());
-  micMediaStream = null;
-  if (micSocket) { micSocket.close(); micSocket = null; }
-  if (micAudioContext) { micAudioContext.close(); micAudioContext = null; }
+  micSocket = null; micWorkletNode = null; micAudioContext = null; micMediaStream = null;
 }
 
-// ── Message Listener ──────────────────────────────────────────────────────────
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (sender.url?.includes('offscreen.html')) return;
+// ── Deepgram message handler ───────────────────────────────────────────────────
+function handleDeepgramMessage(event, speaker) {
+  let data;
+  try { data = JSON.parse(event.data); } catch { return; }
 
-  switch (msg.type) {
-    case 'TRANSCRIPT':
-      handleTranscript(msg.text, msg.isFinal, msg.speaker || 'guest');
-      break;
-    case 'STATUS':
-      handleStatus(msg.state, msg.message);
-      break;
-  }
-});
+  const alt = data?.channel?.alternatives?.[0];
+  if (!alt) return;
 
-// ── Transcript Rendering ──────────────────────────────────────────────────────
-function handleTranscript(text, isFinal, speaker) {
+  const text    = alt.transcript?.trim() || '';
+  const isFinal = data.is_final;
+
   if (!text) return;
 
-  const placeholder = transcriptEl.querySelector('.placeholder-text');
-  if (placeholder) placeholder.remove();
-
   if (isFinal) {
-    transcriptBuffer.push({ text, timestamp: Date.now(), speaker });
     currentInterim[speaker] = '';
-    renderTranscript();
+    appendTranscriptBubble(text, speaker, false);
+    transcriptBuffer.push({ text, speaker, timestamp: Date.now() });
 
-    // Update speech timestamps for silence detector
-    lastSpeechTime = Date.now();
-    if (speaker === 'you') lastUserSpeechTime = Date.now();
-
-    // Auto-question detection: guest utterances only
-    if (speaker === 'guest') {
-      scheduleQuestionCheck(text);
-      checkObjectionPatterns(text);
-    }
-
-    // Checklist coverage check
-    if (checklistItems.length > 0) checkChecklistCoverage(text);
+    // Auto-question detection on guest speech → /query
+    if (speaker === 'guest') maybeQueryBackend(text);
   } else {
     currentInterim[speaker] = text;
-    renderTranscript();
+    updateInterimBubble(text, speaker);
   }
 }
 
-function renderTranscript() {
-  let html = '';
-
-  for (const entry of transcriptBuffer) {
-    const isYou = entry.speaker === 'you';
-    html += `<div class="transcript-entry ${isYou ? 'transcript-you' : 'transcript-guest'}">
-      <span class="transcript-speaker">${isYou ? 'You' : 'Guest'}</span>
-      <span class="transcript-text">${escapeHtml(entry.text)}</span>
-    </div>`;
-  }
-
-  if (currentInterim.guest) {
-    html += `<div class="transcript-entry transcript-guest">
-      <span class="transcript-speaker">Guest</span>
-      <span class="transcript-text transcript-interim">${escapeHtml(currentInterim.guest)}</span>
-    </div>`;
-  }
-  if (currentInterim.you) {
-    html += `<div class="transcript-entry transcript-you">
-      <span class="transcript-speaker">You</span>
-      <span class="transcript-text transcript-interim">${escapeHtml(currentInterim.you)}</span>
-    </div>`;
-  }
-
-  transcriptEl.innerHTML = html;
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+// ── Transcript rendering ───────────────────────────────────────────────────────
+function clearTranscript() {
+  transcript.innerHTML = '<p class="placeholder-text">Transcript will appear here...</p>';
 }
 
-// ── Question Detection ────────────────────────────────────────────────────────
-function scheduleQuestionCheck(text) {
-  if (queryDebounceTimer) clearTimeout(queryDebounceTimer);
+function appendTranscriptBubble(text, speaker, isInterim) {
+  // Remove placeholder
+  const placeholder = transcript.querySelector('.placeholder-text');
+  if (placeholder) placeholder.remove();
 
-  queryDebounceTimer = setTimeout(() => {
-    if (isQuestion(text)) {
-      const now = Date.now();
-      if (now - lastQueryTime > DEBOUNCE_MS) {
-        lastQueryTime = now;
-        triggerQuery(text, getRecentTranscript());
-      }
-    }
-  }, 1000);
+  // Remove existing interim bubble for this speaker
+  const existingInterim = transcript.querySelector(`.transcript-bubble.${speaker}.interim`);
+  if (existingInterim) existingInterim.remove();
+
+  const bubble = document.createElement('div');
+  bubble.className = `transcript-bubble ${speaker}${isInterim ? ' interim' : ''}`;
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'transcript-bubble-label';
+  labelEl.textContent = speaker === 'you' ? 'You' : 'Student';
+  bubble.appendChild(labelEl);
+
+  const textEl = document.createElement('div');
+  textEl.className = 'transcript-bubble-text';
+  textEl.textContent = text;
+  bubble.appendChild(textEl);
+
+  transcript.appendChild(bubble);
+  transcript.scrollTop = transcript.scrollHeight;
 }
 
-function isQuestion(text) {
-  const trimmed = text.trim();
-  return trimmed.endsWith('?') || INTERROGATIVE_STARTERS.test(trimmed);
+function updateInterimBubble(text, speaker) {
+  appendTranscriptBubble(text, speaker, true);
 }
 
-function getRecentTranscript(seconds = 60) {
-  const cutoff = Date.now() - seconds * 1000;
-  const recent = transcriptBuffer
-    .filter(s => s.timestamp > cutoff)
-    .map(s => `${s.speaker === 'you' ? 'You' : 'Guest'}: ${s.text}`)
-    .join('\n');
-  return recent || transcriptBuffer.slice(-10).map(s => `${s.speaker === 'you' ? 'You' : 'Guest'}: ${s.text}`).join('\n');
+clearTranscriptBtn.addEventListener('click', clearTranscript);
+
+// ── Question detection → /query ────────────────────────────────────────────────
+const QUESTION_STARTERS = /^(what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall)\b/i;
+let lastQueryTime = 0;
+const QUERY_DEBOUNCE_MS = 4000;
+
+function maybeQueryBackend(text) {
+  const isQuestion = text.endsWith('?') || QUESTION_STARTERS.test(text);
+  if (!isQuestion) return;
+  if (Date.now() - lastQueryTime < QUERY_DEBOUNCE_MS) return;
+  lastQueryTime = Date.now();
+  runQuery(text);
 }
 
-// ── Objection Pattern Detection ───────────────────────────────────────────────
-function checkObjectionPatterns(text) {
-  if (!activeTheme?.nudgeRules?.customTriggers) return;
-  if (!nudgeQueue.isTypeEnabled('objection_handler')) return;
-
-  const lower = text.toLowerCase();
-  for (const trigger of activeTheme.nudgeRules.customTriggers) {
-    try {
-      const regex = new RegExp(trigger.pattern, 'i');
-      if (regex.test(lower)) {
-        nudgeQueue.add({
-          type: trigger.nudgeType || 'objection_handler',
-          text: trigger.response
-        });
-        return; // Only trigger one objection nudge per utterance
-      }
-    } catch (_) {}
-  }
-}
-
-// ── Silence Detection ─────────────────────────────────────────────────────────
-function startSilenceDetector() {
-  const thresholdSec = activeTheme?.nudgeRules?.silenceThresholdSec || 8;
-  silenceTimer = setInterval(() => {
-    if (!isRecording) return;
-    const silenceDuration = (Date.now() - lastSpeechTime) / 1000;
-    const userSpokeLast = (Date.now() - lastUserSpeechTime) < 30000; // user spoke in last 30s
-
-    if (silenceDuration > thresholdSec && userSpokeLast) {
-      nudgeQueue.add({
-        type: 'silence_prompt',
-        text: "Silence detected. Consider asking: \"Does that make sense?\" or \"Any questions on that?\" to keep the conversation going."
-      });
-    }
-  }, 5000); // check every 5s
-}
-
-function stopSilenceDetector() {
-  if (silenceTimer) { clearInterval(silenceTimer); silenceTimer = null; }
-}
-
-// ── Checklist Coverage (from transcript) ─────────────────────────────────────
-function checkChecklistCoverage(transcriptText) {
-  const lower = transcriptText.toLowerCase();
-  let changed = false;
-
-  checklistItems.forEach(item => {
-    if (item.covered || !item.autoDetectPatterns.length) return;
-    const matchCount = item.autoDetectPatterns.filter(kw => lower.includes(kw.toLowerCase())).length;
-    if (matchCount >= 2) {
-      item.covered = true;
-      item.coveredAt = getCurrentTime();
-      changed = true;
-    }
-  });
-
-  if (changed) renderAgendaChecklist();
-}
-
-// ── Checklist Reminders (time-based) ─────────────────────────────────────────
-function checkChecklistReminders() {
-  if (!isRecording || !recordingStart || !activeTheme) return;
-  if (!nudgeQueue.isTypeEnabled('checklist_reminder')) return;
-
-  const elapsedPct = (Date.now() - recordingStart) / (60 * 60 * 1000); // Estimate 60min meeting
-  const elapsedMin = (Date.now() - recordingStart) / 60000;
-
-  // Find the highest-priority uncovered item past its threshold
-  const overdue = checklistItems
-    .filter(item => !item.covered && elapsedPct > item.nudgeIfMissedAfter)
-    .sort((a, b) => {
-      const pOrd = { critical: 0, high: 1, medium: 2 };
-      return (pOrd[a.priority] ?? 3) - (pOrd[b.priority] ?? 3);
-    });
-
-  if (overdue.length > 0) {
-    const item = overdue[0];
-    const remaining = Math.max(0, Math.round(60 - elapsedMin));
-    nudgeQueue.add({
-      type: 'checklist_reminder',
-      text: `You haven't covered "${item.label}" yet — ~${remaining} min left. ${item.description}.`
-    });
-  }
-}
-
-// ── Closing Cue (time-based) ──────────────────────────────────────────────────
-function checkClosingCue() {
-  if (!isRecording || !recordingStart || !activeTheme || closingCueFired) return;
-  if (!nudgeQueue.isTypeEnabled('closing_cue')) return;
-
-  const elapsedPct = (Date.now() - recordingStart) / (60 * 60 * 1000);
-  const threshold = (activeTheme.nudgeRules.closingCueAtPercent || 80) / 100;
-
-  if (elapsedPct >= threshold) {
-    closingCueFired = true;
-    const uncoveredCritical = checklistItems
-      .filter(i => !i.covered && i.priority === 'critical')
-      .map(i => i.label);
-
-    const elapsedMin = Math.round((Date.now() - recordingStart) / 60000);
-    let text = `${elapsedMin} minutes in — time to wrap up and lock next steps.`;
-    if (uncoveredCritical.length) {
-      text += ` Still uncovered: ${uncoveredCritical.join(', ')}.`;
-    }
-    nudgeQueue.add({ type: 'closing_cue', text });
-  }
-}
-
-// ── Nudge Queue Flush ─────────────────────────────────────────────────────────
-function flushNudgeQueue() {
-  if (!isRecording) return;
-  const nudge = nudgeQueue.flush();
-  if (nudge) renderSingleNudge(nudge);
-}
-
-// ── Nudge Rendering ───────────────────────────────────────────────────────────
-function renderSingleNudge(nudge) {
-  // Remove placeholder if shown
-  const empty = nudgesList.querySelector('.nudge-empty');
-  if (empty) empty.remove();
-
-  const meta  = NUDGE_META[nudge.type] || NUDGE_META.kb_answer;
-  const id    = `nudge-${Date.now()}`;
-  const card  = document.createElement('div');
-  card.className = 'nudge-card';
-  card.dataset.id = id;
-  card.dataset.type = nudge.type;
-  card.dataset.text = nudge.text;
-
-  card.innerHTML = `
-    <div class="nudge-card-header">
-      <span class="nudge-type-badge ${meta.badge}">${meta.icon} ${meta.label}</span>
-      <div class="nudge-card-actions">
-        <button class="nudge-pin" title="Pin for report">📌</button>
-        <button class="nudge-dismiss" title="Dismiss">×</button>
-      </div>
-    </div>
-    <span class="nudge-text">${escapeHtml(nudge.text)}</span>
-    ${nudge.source ? `<div class="nudge-source">${escapeHtml(nudge.source)}</div>` : ''}
-    <div class="nudge-card-footer">
-      <button class="nudge-copy">📋 Copy</button>
-      <button class="nudge-edit-copy">✏️ Edit & Copy</button>
-    </div>
-  `;
-
-  // Pin
-  card.querySelector('.nudge-pin').addEventListener('click', (e) => {
-    const btn = e.currentTarget;
-    const isPinned = btn.classList.toggle('pinned');
-    card.classList.toggle('pinned', isPinned);
-    if (isPinned) {
-      pinnedNudges.push({ type: nudge.type, text: nudge.text });
-    } else {
-      pinnedNudges = pinnedNudges.filter(n => n.text !== nudge.text);
-    }
-  });
-
-  // Dismiss
-  card.querySelector('.nudge-dismiss').addEventListener('click', () => {
-    card.style.transition = 'opacity 0.2s';
-    card.style.opacity = '0';
-    setTimeout(() => card.remove(), 200);
-    nudgeQueue.dismiss(nudge.type);
-    nudgesDismissedCount++;
-    if (!nudgesList.children.length) {
-      nudgesList.innerHTML = '<p class="nudge-empty">Listening for conversation context...</p>';
-    }
-  });
-
-  // Copy
-  card.querySelector('.nudge-copy').addEventListener('click', (e) => {
-    navigator.clipboard.writeText(nudge.text).then(() => {
-      e.target.textContent = '✓ Copied';
-      setTimeout(() => e.target.textContent = '📋 Copy', 1500);
-    });
-    nudgesUsedCount++;
-  });
-
-  // Edit & Copy
-  card.querySelector('.nudge-edit-copy').addEventListener('click', (e) => {
-    const textEl = card.querySelector('.nudge-text');
-    if (textEl.contentEditable !== 'true') {
-      textEl.contentEditable = 'true';
-      textEl.focus();
-      e.target.textContent = '✓ Copy edited';
-    } else {
-      navigator.clipboard.writeText(textEl.textContent).then(() => {
-        textEl.contentEditable = 'false';
-        e.target.textContent = '✏️ Edit & Copy';
-      });
-      nudgesUsedCount++;
-    }
-  });
-
-  // Prepend new nudge at top with animation
-  nudgesList.prepend(card);
-  nudgesSection.classList.remove('hidden');
-}
-
-// ── Backend Nudge Refresh (LLM-based nudges) ──────────────────────────────────
-async function refreshNudges() {
-  if (!isRecording) return;
-  nudgeSpinner.classList.remove('hidden');
+async function runQuery(question) {
+  const recentTranscript = transcriptBuffer.slice(-20).map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`).join('\n');
 
   try {
-    const enabledTypes = activeTheme?.nudgeRules?.enabledTypes || Object.keys(NUDGE_META);
-
-    const res = await fetch(`${BACKEND_URL}/nudge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        transcript: getRecentTranscript(120),
-        checklist_items: checklistItems.map(a => ({
-          id: a.id,
-          label: a.label,
-          covered: a.covered,
-          priority: a.priority
-        })),
-        enabled_nudge_types: enabledTypes,
-        theme_goal: activeTheme?.goal?.statement || '',
-        theme_persona: activeTheme ? {
-          role: activeTheme.persona.role,
-          tone: activeTheme.persona.tone,
-          outputStyle: activeTheme.persona.outputStyle
-        } : null
-      })
-    });
-
-    if (!res.ok) return;
-    const data = await res.json();
-
-    (data.nudges || []).slice(0, 3).forEach(n => {
-      if (nudgeQueue.isTypeEnabled(n.type)) {
-        nudgeQueue.add({ type: n.type, text: n.text, source: n.source });
-      }
-    });
-
-  } catch (e) {
-    console.error('[SP] Nudge refresh error:', e);
-  } finally {
-    nudgeSpinner.classList.add('hidden');
-  }
-}
-
-// ── Status ────────────────────────────────────────────────────────────────────
-function handleStatus(state, message) {
-  setStatus(state, message);
-}
-
-function setStatus(state, message) {
-  statusLabel.textContent = message || state;
-  statusDot.className = 'status-dot';
-
-  switch (state) {
-    case 'recording': statusDot.classList.add('recording'); break;
-    case 'connected': statusDot.classList.add('connected'); break;
-    case 'error':     statusDot.classList.add('error'); break;
-    default:          break;
-  }
-}
-
-// ── Timer ─────────────────────────────────────────────────────────────────────
-function updateTimer() {
-  if (!recordingStart) return;
-  const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
-  const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
-  const s = (elapsed % 60).toString().padStart(2, '0');
-  timerEl.textContent = `${m}:${s}`;
-}
-
-function getCurrentTime() {
-  if (!recordingStart) return '';
-  const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
-  const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
-  const s = (elapsed % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-}
-
-function getMeetingDuration() {
-  if (!recordingStart) return '0:00';
-  const end = meetingEndTime || Date.now();
-  const elapsed = Math.floor((end - recordingStart) / 1000);
-  const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
-  const s = (elapsed % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-}
-
-// ── Checklist Rendering ───────────────────────────────────────────────────────
-function renderAgendaChecklist() {
-  if (!checklistItems.length) {
-    agendaChecklist.classList.add('hidden');
-    return;
-  }
-
-  let html = '<div class="checklist-title">Checklist</div>';
-
-  checklistItems.forEach((item, i) => {
-    const timeStr = item.coveredAt ? ` <span class="covered-time">${item.coveredAt}</span>` : '';
-    html += `<label class="checklist-row ${item.covered ? 'covered' : ''}">
-      <input type="checkbox" ${item.covered ? 'checked' : ''} data-idx="${i}" class="agenda-checkbox" />
-      <span class="checklist-text">${escapeHtml(item.label)}</span>${timeStr}
-    </label>`;
-  });
-
-  agendaChecklist.innerHTML = html;
-
-  agendaChecklist.querySelectorAll('.agenda-checkbox').forEach(cb => {
-    cb.addEventListener('change', (e) => {
-      const idx = parseInt(e.target.dataset.idx);
-      checklistItems[idx].covered = e.target.checked;
-      checklistItems[idx].coveredAt = e.target.checked ? getCurrentTime() : null;
-      renderAgendaChecklist();
-    });
-  });
-}
-
-// ── Meeting Prep: Brief Generation ───────────────────────────────────────────
-async function triggerBrief(context) {
-  generateBriefBtn.textContent = '⏳ Generating...';
-  generateBriefBtn.disabled = true;
-  briefingCard.classList.add('hidden');
-
-  try {
-    const res = await fetch(`${BACKEND_URL}/brief`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agenda: context })
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    let briefHtml = '';
-    if (data.key_facts?.length) {
-      briefHtml += `<div class="brief-section-title">Key Facts</div><ul class="brief-list">`;
-      briefHtml += data.key_facts.map(f => `<li>${escapeHtml(f)}</li>`).join('');
-      briefHtml += `</ul>`;
-    }
-    if (data.likely_questions?.length) {
-      briefHtml += `<div class="brief-section-title">Likely Questions</div>`;
-      briefHtml += data.likely_questions.map(qa =>
-        `<div class="brief-qa">
-          <div class="brief-q">Q: ${escapeHtml(qa.q)}</div>
-          <div class="brief-a">A: ${escapeHtml(qa.a)}</div>
-        </div>`
-      ).join('');
-    }
-
-    briefingContent.innerHTML = briefHtml;
-    briefingCard.classList.remove('hidden');
-
-  } catch (e) {
-    briefingContent.innerHTML = `<div class="brief-error">Failed to generate brief: ${escapeHtml(e.message)}</div>`;
-    briefingCard.classList.remove('hidden');
-    console.error('[SP] Brief error:', e);
-  } finally {
-    generateBriefBtn.textContent = 'Generate brief';
-    generateBriefBtn.disabled = false;
-  }
-}
-
-// ── Backend Query ─────────────────────────────────────────────────────────────
-async function triggerQuery(question, transcript) {
-  showSuggestionSection(true);
-  suggestionText.textContent = '';
-  sourceLabel.textContent = '';
-  spinner.classList.remove('hidden');
-  copyBtn.disabled = true;
-
-  let fullText = '';
-
-  try {
-    const body = {
-      transcript,
-      query: question
-    };
-    if (activeTheme) {
-      body.theme_persona = {
-        role: activeTheme.persona.role,
-        tone: activeTheme.persona.tone,
-        outputStyle: activeTheme.persona.outputStyle,
-        constraints: activeTheme.persona.constraints
-      };
-    }
-
     const response = await fetch(`${BACKEND_URL}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        transcript: recentTranscript,
+        query: question,
+        student_context: activeStudent,
+      }),
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${response.status}`);
-    }
-
+    if (!response.body) return;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let fullText = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         try {
-          const payload = JSON.parse(line.slice(6));
-
-          if (payload.text) {
-            fullText += payload.text;
-            suggestionText.textContent = fullText;
+          const parsed = JSON.parse(line.slice(6));
+          if (parsed.text) fullText += parsed.text;
+          if (parsed.done && fullText.trim()) {
+            nudgeQueue.add({
+              type: 'kb_answer',
+              text: `Student asked: "${question}"`,
+              suggestion: fullText.trim(),
+              source: parsed.sources?.join(', ') || 'KB',
+            });
+            const next = nudgeQueue.flush();
+            if (next) showAssistCard(next);
           }
-
-          if (payload.done) {
-            spinner.classList.add('hidden');
-            copyBtn.disabled = false;
-            if (payload.sources?.length) {
-              if (payload.fallback) {
-                sourceLabel.textContent = '🌐 General Knowledge (not in KB)';
-                sourceLabel.className = 'source-label source-fallback';
-              } else {
-                sourceLabel.textContent = `Sources: ${payload.sources.join(', ')}`;
-                sourceLabel.className = 'source-label';
-              }
-            }
-            addToHistory(fullText, payload.sources || [], payload.fallback);
-          }
-
-          if (payload.error) {
-            suggestionText.textContent = `Error: ${payload.error}`;
-            spinner.classList.add('hidden');
-          }
-        } catch (e) { /* skip malformed SSE line */ }
+        } catch { /* ignore parse errors */ }
       }
     }
-
   } catch (e) {
-    spinner.classList.add('hidden');
-    suggestionText.textContent = `Could not reach backend: ${e.message}`;
-    console.error('[SP] Query error:', e);
+    console.warn('/query failed:', e.message);
   }
 }
 
-// ── Suggestion Display ────────────────────────────────────────────────────────
-function showSuggestionSection(visible) {
-  suggestionSection.style.display = visible ? 'flex' : 'none';
-}
+// ── Nudge backend polling ──────────────────────────────────────────────────────
+async function callNudgeBackend() {
+  if (!isRecording) return;
 
-function addToHistory(text, sources, fallback = false) {
-  if (!text.trim()) return;
-
-  suggestionHistory.unshift({ text, sources, fallback });
-  historySection.style.display = 'flex';
-
-  const sourceHtml = sources.length
-    ? `<div class="history-source ${fallback ? 'source-fallback' : ''}">
-        ${fallback ? '🌐 General Knowledge' : `Sources: ${sources.join(', ')}`}
-       </div>`
-    : '';
-
-  const item = document.createElement('div');
-  item.className = 'history-item';
-  item.innerHTML = `<div>${escapeHtml(text)}</div>${sourceHtml}`;
-  historyList.prepend(item);
-
-  while (historyList.children.length > 10) {
-    historyList.removeChild(historyList.lastChild);
-  }
-}
-
-// ── Post-Meeting Panel ────────────────────────────────────────────────────────
-function showPostMeetingPanel() {
-  const duration = getMeetingDuration();
-  const covered  = checklistItems.filter(i => i.covered).length;
-  const total    = checklistItems.length;
-  const scoreStr = total > 0 ? `${covered}/${total}` : '—';
-
-  statDuration.textContent   = duration;
-  statChecklist.textContent  = scoreStr;
-  statNudgesUsed.textContent = nudgesUsedCount;
-
-  reportOutput.classList.add('hidden');
-  reportContent.textContent = '';
-  generateReportBtn.disabled = false;
-  generateReportBtn.textContent = 'Generate Meeting Report';
-
-  // Guest save row — pre-fill if a guest was active, else show blank
-  guestSaveInput.value = activeGuest ? activeGuest.name : (guestNameInput.value.trim() || '');
-  guestSaveInput.disabled = false;
-  saveGuestBtn.disabled = false;
-  guestSaveConfirm.classList.add('hidden');
-
-  postMeetingPanel.classList.remove('hidden');
-}
-
-async function triggerReport() {
-  generateReportBtn.disabled = true;
-  generateReportBtn.textContent = '⏳ Generating...';
-  reportOutput.classList.remove('hidden');
-  reportContent.textContent = '';
-  notionPushBtn.classList.add('hidden');
-  notionPushBtn.disabled = false;
-  notionPushBtn.textContent = 'Push to Notion';
-  notionPushStatus.classList.add('hidden');
+  const recentTranscript = transcriptBuffer.slice(-40).map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`).join('\n');
+  if (!recentTranscript.trim()) return;
 
   try {
-    const fullTranscript = transcriptBuffer
-      .map(e => `[${new Date(e.timestamp).toISOString().slice(11, 19)}] ${e.speaker === 'you' ? 'You' : 'Guest'}: ${e.text}`)
-      .join('\n');
+    const data = await fetch(`${BACKEND_URL}/nudge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript: recentTranscript,
+        script_state: scriptState,
+        student_context: activeStudent,
+        call_elapsed_seconds: nudgeCallElapsed,
+        expected_call_duration_seconds: EXPECTED_CALL_DURATION_S,
+      }),
+    }).then(r => r.json());
 
-    const checklistState = checklistItems
-      .map(i => `[${i.covered ? '✓' : ' '}] ${i.label} (${i.priority})`)
-      .join('\n');
+    // Apply extracted fields
+    if (data.extracted_fields) applyExtractedFields(data.extracted_fields);
 
+    // Apply script state updates
+    if (data.script_state_update) applyScriptStateUpdate(data.script_state_update);
+
+    // Add nudges to queue
+    if (data.nudges?.length) {
+      data.nudges.forEach(n => {
+        if (nudgeQueue.isTypeEnabled(n.type)) {
+          nudgeQueue.add(n);
+          queuedNudges.push(n);
+        }
+      });
+
+      // Show if no active card
+      if (!activeNudge) {
+        const next = nudgeQueue.flush();
+        if (next) showAssistCard(next);
+      } else {
+        // Interrupt if higher priority P1 nudge
+        const highPriority = data.nudges.find(n => ['profile_clarification', 'intent_divergence'].includes(n.type));
+        if (highPriority && activeNudge.priority < 5) {
+          nudgeQueue.add(highPriority);
+          const next = nudgeQueue.flush();
+          if (next) showAssistCard(next);
+        }
+        // Update peek row
+        assistPeekRow.innerHTML = queuedNudges.slice(0, 3).map(n =>
+          `<span class="peek-badge">${TYPE_LABELS[n.type] || n.type}</span>`
+        ).join('');
+      }
+    }
+  } catch (e) {
+    console.warn('/nudge failed:', e.message);
+  }
+}
+
+// ── Post-call ──────────────────────────────────────────────────────────────────
+async function transitionToPostCall(durationStr) {
+  setAppState('post-call');
+  headerTitle.textContent = 'Call Complete';
+  postDuration.textContent = durationStr;
+  postStudentName.textContent = activeStudent ? activeStudent.name : 'No student loaded';
+
+  // Reset qualitative fields
+  qProfileSummary.value = activeStudent?.profile_summary || '';
+  qMotivation.value     = activeStudent?.motivation      || '';
+  qConstraints.value    = activeStudent?.constraints     || '';
+  qEmotionalNotes.value = '';
+
+  // Set lead status
+  const callNum = (activeStudent?.call_count || 0) + 1;
+  const suggested = callNum === 1 ? 'Call 1 Done' : callNum === 2 ? 'Call 2 Done' : 'Applied';
+  leadStatusSelect.value = suggested;
+
+  // Clear extraction panel
+  extractionStatus.textContent = 'Extracting...';
+  extractedFields.innerHTML = '';
+  openQuestions.innerHTML = '';
+  counsellorCommitments.innerHTML = '';
+  reportOutput.classList.add('hidden');
+  notionSaveStatus.classList.add('hidden');
+
+  // Call /extract
+  const fullTranscript = transcriptBuffer.map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`).join('\n');
+  runExtraction(fullTranscript, callNum);
+}
+
+async function runExtraction(fullTranscript, callNum) {
+  try {
+    const data = await fetch(`${BACKEND_URL}/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript: fullTranscript,
+        student_context: activeStudent,
+        call_number: callNum,
+      }),
+    }).then(r => r.json());
+
+    extractionData = data;
+    extractionStatus.textContent = 'Review & confirm';
+
+    renderExtractionFields(data.profile_updates || {});
+    renderOpenItems(data.open_questions || [], data.counsellor_commitments || []);
+
+    // Pre-fill qualitative
+    if (data.qualitative?.profile_summary) qProfileSummary.value = data.qualitative.profile_summary;
+    if (data.qualitative?.motivation)      qMotivation.value     = data.qualitative.motivation;
+    if (data.qualitative?.constraints)     qConstraints.value    = data.qualitative.constraints;
+    if (data.qualitative?.emotional_notes) qEmotionalNotes.value = data.qualitative.emotional_notes;
+
+    // Lead status suggestion
+    if (data.lead_status_suggestion) leadStatusSelect.value = data.lead_status_suggestion;
+
+  } catch (e) {
+    extractionStatus.textContent = `Extraction failed: ${e.message}`;
+  }
+}
+
+function renderExtractionFields(updates) {
+  const DISPLAY_FIELDS = [
+    ['country','Country'], ['intake','Intake'], ['budget','Budget'],
+    ['preferred_course','Course'], ['preferred_degree','Degree'],
+    ['preferred_location','Location'], ['work_experience_months','Work exp (months)'],
+    ['backlogs','Backlogs'], ['ielts_score','IELTS'], ['ug_score','UG score'],
+    ['gre_gmat_score','GRE/GMAT'], ['college_in_mind','Colleges in mind'],
+  ];
+
+  const rows = DISPLAY_FIELDS.map(([key, label]) => {
+    const newVal = updates[key];
+    const oldVal = activeStudent?.[key];
+    if (!newVal && !oldVal) return '';
+
+    const displayNew = Array.isArray(newVal) ? newVal.join(', ') : newVal;
+    const displayOld = Array.isArray(oldVal) ? oldVal.join(', ') : oldVal;
+    const isNew = newVal && (!oldVal || String(displayNew) !== String(displayOld));
+
+    return `
+      <div class="extracted-field-row">
+        <span class="ef-label">${label}</span>
+        <div class="ef-value-wrap">
+          ${newVal ? `<span class="ef-value${isNew ? ' is-new' : ''}" contenteditable="true" data-field="${key}">${escapeHtml(String(displayNew))}</span>` :
+                     `<span class="ef-value">${escapeHtml(String(displayOld))}</span>`}
+          ${isNew && displayOld ? `<span class="ef-old-value">${escapeHtml(String(displayOld))}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).filter(Boolean);
+
+  extractedFields.innerHTML = rows.join('') || '<div style="color:var(--text-3);font-size:12px">No fields extracted</div>';
+}
+
+function renderOpenItems(questions, commitments) {
+  openQuestions.innerHTML = questions.length ? `
+    <div class="open-items-section-label">Open Questions</div>
+    ${questions.map(q => `
+      <div class="open-item-row">
+        <input type="checkbox" />
+        <span class="open-item-text">${escapeHtml(q)}</span>
+      </div>
+    `).join('')}
+  ` : '';
+
+  counsellorCommitments.innerHTML = commitments.length ? `
+    <div class="open-items-section-label">Counsellor Commitments</div>
+    ${commitments.map(c => `
+      <div class="open-item-row">
+        <input type="checkbox" />
+        <span class="open-item-text">${escapeHtml(c)}</span>
+      </div>
+    `).join('')}
+  ` : '';
+}
+
+// ── Report generation ──────────────────────────────────────────────────────────
+generateReportBtn.addEventListener('click', async () => {
+  generateReportBtn.textContent = '⟳ Generating...';
+  generateReportBtn.disabled = true;
+
+  const fullTranscript = transcriptBuffer.map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`).join('\n');
+  const duration = postDuration.textContent;
+
+  try {
     const response = await fetch(`${BACKEND_URL}/report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        transcript:      fullTranscript,
-        checklist_state: checklistState,
-        pinned_nudges:   pinnedNudges.map(n => ({ type: n.type, text: n.text })),
-        theme_id:        activeTheme?.id || 'counselling',
-        theme_goal:      activeTheme?.goal?.statement || '',
-        duration:        getMeetingDuration(),
-        goal_achieved:   document.getElementById('goalAchievedCheck').checked
-      })
+        transcript: fullTranscript,
+        checklist_state: '',
+        pinned_nudges: [],
+        theme_id: 'counselling',
+        theme_goal: getCounsellingTheme().goal.statement,
+        duration,
+        goal_achieved: false,
+      }),
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const reader  = response.body.getReader();
+    if (!response.body) throw new Error('No response body');
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer    = '';
-    let fullReport = '';
+    let fullText = '';
+
+    reportContent.textContent = '';
+    reportOutput.classList.remove('hidden');
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for (const line of lines) {
+      const chunk = decoder.decode(value);
+      for (const line of chunk.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         try {
-          const payload = JSON.parse(line.slice(6));
-          if (payload.text) {
-            fullReport += payload.text;
-            reportContent.textContent = fullReport;
-          }
-          if (payload.done) {
-            generateReportBtn.textContent = 'Report Generated ✓';
-            // Show Push to Notion button if Notion is configured
-            _getNotionKey().then(key => {
-              _getNotionDb().then(dbId => {
-                if (key && dbId) notionPushBtn.classList.remove('hidden');
-              });
-            });
-          }
-        } catch (_) {}
+          const parsed = JSON.parse(line.slice(6));
+          if (parsed.text) { fullText += parsed.text; reportContent.textContent = fullText; }
+        } catch { /* ignore */ }
       }
     }
-
   } catch (e) {
-    reportContent.textContent = `Failed to generate report: ${e.message}`;
-    generateReportBtn.disabled = false;
-    generateReportBtn.textContent = 'Generate Meeting Report';
-    console.error('[SP] Report error:', e);
+    reportContent.textContent = `Error: ${e.message}`;
+    reportOutput.classList.remove('hidden');
   }
+
+  generateReportBtn.textContent = 'Generate report';
+  generateReportBtn.disabled = false;
+});
+
+// ── Save to Notion ─────────────────────────────────────────────────────────────
+saveNotionBtn.addEventListener('click', async () => {
+  if (!notionApiKey || !activeStudentPageId) {
+    notionSaveStatus.textContent = !notionApiKey
+      ? 'Configure Notion API key in Settings'
+      : 'No student selected — cannot save';
+    notionSaveStatus.style.color = 'var(--c-profile)';
+    notionSaveStatus.classList.remove('hidden');
+    return;
+  }
+
+  saveNotionBtn.disabled = true;
+  saveNotionBtn.textContent = 'Saving...';
+  notionSaveStatus.classList.add('hidden');
+
+  try {
+    // Gather extracted field values (support inline edits via contenteditable)
+    const profileUpdates = {};
+    extractedFields.querySelectorAll('[contenteditable][data-field]').forEach(el => {
+      const key = el.dataset.field;
+      const val = el.textContent.trim();
+      if (val) {
+        profileUpdates[key] = key === 'country' ? val.split(',').map(s => s.trim()) : val;
+      }
+    });
+
+    // Qualitative
+    profileUpdates.profile_summary       = qProfileSummary.value.trim();
+    profileUpdates.motivation            = qMotivation.value.trim();
+    profileUpdates.constraints           = qConstraints.value.trim();
+    profileUpdates.emotional_notes       = qEmotionalNotes.value.trim();
+    profileUpdates.last_call_summary     = reportContent.textContent.trim().slice(0, 500) || '';
+
+    // Collect open items
+    const openQs   = Array.from(openQuestions.querySelectorAll('.open-item-text')).map(el => el.textContent);
+    const commits  = Array.from(counsellorCommitments.querySelectorAll('.open-item-text')).map(el => el.textContent);
+    if (openQs.length)  profileUpdates.open_questions        = openQs.join('\n');
+    if (commits.length) profileUpdates.counsellor_commitments = commits.join('\n');
+
+    const newLeadStatus = leadStatusSelect.value;
+
+    // Update profile properties
+    await NotionSync.updateStudentProfile(activeStudentPageId, profileUpdates, notionApiKey, true, newLeadStatus);
+
+    // Append call history to page body
+    const callNum = (activeStudent?.call_count || 0) + 1;
+    const today = new Date().toISOString().slice(0, 10);
+    const duration = postDuration.textContent || '';
+    const reportMd = reportContent.textContent || 'No report generated.';
+
+    await NotionSync.appendCallHistory(
+      activeStudentPageId, callNum, duration, today, reportMd,
+      { open_questions: openQs, counsellor_commitments: commits },
+      notionApiKey
+    );
+
+    notionSaveStatus.textContent = '✓ Saved to Notion';
+    notionSaveStatus.style.color = 'var(--c-script)';
+    notionSaveStatus.classList.remove('hidden');
+    saveNotionBtn.textContent = '✓ Saved';
+  } catch (e) {
+    notionSaveStatus.textContent = `Save failed: ${e.message}`;
+    notionSaveStatus.style.color = 'var(--c-profile)';
+    notionSaveStatus.classList.remove('hidden');
+    saveNotionBtn.textContent = 'Save to Notion';
+    saveNotionBtn.disabled = false;
+  }
+});
+
+// ── New call ───────────────────────────────────────────────────────────────────
+newCallBtn.addEventListener('click', () => {
+  activeNudge = null;
+  queuedNudges = [];
+  transcriptBuffer = [];
+  extractionData = null;
+  headerTitle.textContent = 'Counsellor Assistant';
+  resetFieldState();
+  initScriptState();
+  setAppState('pre-call');
+  renderFieldPills();
+  renderScriptTracker();
+});
+
+// ── Utility ────────────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+// ── Boot ───────────────────────────────────────────────────────────────────────
+init();

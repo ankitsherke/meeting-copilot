@@ -3,205 +3,242 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meeting Copilot</title>
+  <title>Counsellor Assistant</title>
   <link rel="stylesheet" href="sidepanel.css" />
 </head>
 <body>
 
-  <!-- Header -->
+  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
   <header class="header">
     <div class="header-left">
-      <span class="logo-square">M</span>
-      <span class="app-name">Meeting Copilot</span>
+      <span class="logo-square">L</span>
+      <span class="app-name" id="headerTitle">Counsellor Assistant</span>
     </div>
     <div class="header-right">
       <span class="status-dot" id="statusDot"></span>
-      <span class="status-label" id="statusLabel">Ready</span>
-      <span class="timer" id="timer"></span>
-      <button class="btn-stop hidden" id="stopBtn">Stop</button>
+      <span class="timer hidden" id="timer"></span>
+      <button class="btn-stop hidden" id="stopBtn">■ Stop</button>
       <button class="btn-settings" id="settingsToggle" title="Settings">⚙</button>
     </div>
   </header>
 
-  <!-- SETTINGS PANEL (collapsible) -->
+  <!-- ── SETTINGS PANEL ─────────────────────────────────────────────────── -->
   <div class="settings-panel hidden" id="settingsPanel">
     <div class="settings-section">
       <p class="settings-label">Deepgram API Key</p>
       <div class="settings-row">
-        <input type="password" id="deepgramKeyInput" placeholder="Enter Deepgram API key..." class="key-input settings-key-input" />
+        <input type="password" id="deepgramKeyInput" placeholder="dg_..." class="settings-input" />
         <button class="btn-save-inline" id="saveKeyBtn">Save</button>
       </div>
-      <p class="settings-hint">Get a free key at <strong>deepgram.com</strong></p>
     </div>
     <div class="settings-divider"></div>
     <div class="settings-section">
       <p class="settings-label">Notion Integration</p>
       <div class="settings-row">
-        <input type="password" id="notionKeyInput" placeholder="Notion integration token..." class="key-input settings-key-input" />
+        <input type="password" id="notionKeyInput" placeholder="secret_..." class="settings-input" />
         <button class="btn-save-inline" id="saveNotionKeyBtn">Save</button>
       </div>
       <div class="settings-row" style="margin-top:6px">
-        <input type="text" id="notionDbInput" placeholder="Database ID (leave blank to auto-create)..." class="key-input settings-key-input" />
+        <input type="text" id="notionDbInput" placeholder="Students database ID..." class="settings-input" />
         <button class="btn-save-inline" id="saveNotionDbBtn">Save</button>
       </div>
-      <div class="settings-notion-actions">
+      <div class="settings-row" style="margin-top:6px">
         <button class="btn-notion-action" id="notionTestBtn">Test connection</button>
-        <button class="btn-notion-action" id="notionCreateDbBtn">Auto-create DB</button>
       </div>
-      <p class="settings-notion-status hidden" id="notionStatus"></p>
+      <p class="settings-status hidden" id="notionStatus"></p>
     </div>
   </div>
 
-  <!-- API Key Setup (shown when key is missing) -->
-  <div class="api-setup hidden" id="apiSetup">
-    <p class="setup-title">⚙️ Deepgram API Key Required</p>
-    <p class="setup-hint">Open Settings (⚙) above to add your key.</p>
-  </div>
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- STATE 1: PRE-CALL                                                   -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div id="statePreCall" class="state-panel">
 
-  <!-- Mic Permission Banner -->
-  <div class="mic-banner hidden" id="micBanner">
-    <span>🎤 Mic access needed for "You" transcription.</span>
-    <button class="btn-mic-allow" id="micAllowBtn">Allow Mic</button>
-  </div>
-
-  <!-- NUDGE HERO ZONE (shown only when recording) -->
-  <div class="nudges-hero hidden" id="nudgesSection">
-    <div class="nudges-header">
-      <span class="nudges-label">NEXT UP</span>
-      <span class="nudge-spinner hidden" id="nudgeSpinner">⟳</span>
-    </div>
-    <div id="nudgesList">
-      <p class="nudge-empty">Listening for conversation context...</p>
-    </div>
-  </div>
-
-  <!-- AGENDA PILLS (shown when checklist loaded, active meeting) -->
-  <div id="agendaChecklist" class="hidden"></div>
-
-  <!-- THEME SELECTOR (pre-meeting only) -->
-  <div class="theme-selector" id="themeSelector">
-    <span class="section-label">Meeting Type</span>
-    <div class="theme-pills" id="themePills">
-      <!-- Rendered by JS -->
-    </div>
-  </div>
-
-  <!-- MEETING PREP SECTION -->
-  <div class="meeting-prep-section" id="meetingPrepSection">
-    <div id="prepInputArea">
-      <!-- Guest name field with autocomplete -->
-      <div class="guest-input-wrap" id="guestInputWrap">
-        <input type="text" id="guestNameInput" class="guest-input" placeholder="Guest name (optional)..." autocomplete="off" />
-        <div class="guest-suggestions hidden" id="guestSuggestions"></div>
+    <!-- Student search -->
+    <div class="search-section">
+      <div class="search-wrap">
+        <input type="text" id="studentSearchInput" class="student-search-input"
+               placeholder="Search student by name..." autocomplete="off" />
+        <span class="search-icon">⌕</span>
       </div>
+      <div class="student-suggestions hidden" id="studentSuggestions"></div>
+    </div>
 
-      <!-- Past context card — shown when a known guest is selected -->
-      <div class="guest-context-card hidden" id="guestContextCard">
-        <div class="guest-context-header">
-          <span class="guest-context-name" id="guestContextName"></span>
-          <span class="guest-context-meta" id="guestContextMeta"></span>
-          <button class="guest-context-clear" id="guestContextClear" title="Clear guest">✕</button>
+    <!-- Student brief card (shown when student selected) -->
+    <div class="student-brief-card hidden" id="studentBriefCard">
+      <div class="brief-card-header">
+        <div class="brief-card-identity">
+          <span class="brief-student-name" id="briefStudentName"></span>
+          <span class="brief-source-badge" id="briefSourceBadge"></span>
+          <span class="brief-call-badge" id="briefCallBadge"></span>
         </div>
-        <div class="guest-context-body" id="guestContextBody"></div>
+        <button class="brief-clear-btn" id="briefClearBtn" title="Clear selection">✕</button>
+      </div>
+      <div class="brief-initial-interest" id="briefInitialInterest"></div>
+
+      <!-- Readiness bar -->
+      <div class="readiness-bar-wrap">
+        <div class="readiness-label">
+          <span>Shortlist readiness</span>
+          <span id="readinessScore">0/5 fields</span>
+        </div>
+        <div class="readiness-bar">
+          <div class="readiness-fill" id="readinessFill" style="width:0%"></div>
+        </div>
+        <div class="readiness-missing" id="readinessMissing"></div>
       </div>
 
-      <textarea id="agendaText" class="agenda-input" placeholder="Topic, agenda, notes..." rows="3"></textarea>
-      <div class="prep-buttons">
-        <button class="btn-brief" id="generateBriefBtn">Generate brief</button>
-        <button class="btn-skip" id="meetingPrepToggle">Brief ▾</button>
+      <!-- Carry-forwards (Call 2+ only) -->
+      <div class="carry-forwards hidden" id="carryForwards">
+        <div class="carry-header">⚠ From last call</div>
+        <div class="carry-items" id="carryItems"></div>
       </div>
-    </div>
-    <div id="meetingPrepBody">
-      <div id="briefingCard" class="hidden">
+
+      <!-- KB Brief -->
+      <div class="brief-actions-row">
+        <button class="btn-brief" id="generateBriefBtn">Generate brief</button>
+      </div>
+      <div class="briefing-card hidden" id="briefingCard">
         <div class="briefing-content" id="briefingContent"></div>
       </div>
     </div>
+
+    <!-- No student selected prompt -->
+    <div class="no-student-prompt" id="noStudentPrompt">
+      <p>Search for a student above to load their profile before the call.</p>
+    </div>
+
+    <!-- Start button -->
+    <div class="pre-call-start">
+      <button class="btn-start" id="startBtn">● Start listening</button>
+    </div>
+
   </div>
 
-  <!-- TRANSCRIPT -->
-  <section class="section transcript-section">
-    <div class="section-header">
-      <span class="section-label">Live Transcript</span>
-      <button class="btn-clear" id="clearBtn">Clear</button>
-    </div>
-    <div class="transcript" id="transcript">
-      <p class="placeholder-text">Transcript will appear here when you start listening...</p>
-    </div>
-  </section>
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- STATE 2: IN-CALL                                                    -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div id="stateInCall" class="state-panel hidden">
 
-  <!-- SUGGESTED RESPONSE -->
-  <section class="section suggestion-section" id="suggestionSection" style="display:none">
-    <div class="section-header">
-      <span class="section-label">Suggested Response</span>
-      <div class="suggestion-actions">
-        <span class="suggestion-spinner hidden" id="spinner">⟳</span>
-        <button class="btn-copy" id="copyBtn">Copy</button>
+    <!-- Assist card -->
+    <div class="assist-card-wrap" id="assistCardWrap">
+      <div class="assist-card-empty" id="assistCardEmpty">
+        <span class="listening-pulse"></span>
+        Listening for conversation context...
+      </div>
+      <div class="assist-card hidden" id="assistCard">
+        <div class="assist-card-top">
+          <span class="assist-type-badge" id="assistTypeBadge"></span>
+          <div class="assist-card-actions">
+            <button class="btn-assist-copy" id="assistCopyBtn" title="Copy suggestion">⎘</button>
+            <button class="btn-assist-dismiss" id="assistDismissBtn" title="Dismiss">✕</button>
+          </div>
+        </div>
+        <div class="assist-explanation" id="assistExplanation"></div>
+        <div class="assist-suggestion-wrap">
+          <div class="assist-suggestion" id="assistSuggestion"></div>
+        </div>
+        <div class="assist-peek-row" id="assistPeekRow"></div>
       </div>
     </div>
-    <div class="suggestion-card" id="suggestionCard">
-      <div class="suggestion-text" id="suggestionText"></div>
-      <span class="source-label" id="sourceLabel"></span>
-    </div>
-  </section>
 
-  <!-- POST-MEETING PANEL (hidden during recording, shown after stop) -->
-  <div class="post-meeting-panel hidden" id="postMeetingPanel">
-    <div class="post-stats">
-      <div class="stat-item">
-        <span class="stat-value" id="statDuration">—</span>
-        <span class="stat-label">Duration</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-value" id="statChecklist">—</span>
-        <span class="stat-label">Checklist</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-value" id="statNudgesUsed">—</span>
-        <span class="stat-label">Nudges Used</span>
-      </div>
+    <!-- Field tracker -->
+    <div class="field-tracker" id="fieldTracker">
+      <div class="tracker-label">Fields</div>
+      <div class="field-pills" id="fieldPills"></div>
     </div>
-    <div class="post-goal-row">
-      <label class="goal-check-label">
-        <input type="checkbox" id="goalAchievedCheck" />
-        <span>Meeting goal achieved</span>
-      </label>
-    </div>
-    <!-- Save to guest profile -->
-    <div class="guest-save-row" id="guestSaveRow">
-      <input type="text" id="guestSaveInput" class="guest-save-input" placeholder="Guest name to save this meeting..." autocomplete="off" />
-      <button class="btn-save-guest" id="saveGuestBtn">Save</button>
-    </div>
-    <div class="guest-save-confirm hidden" id="guestSaveConfirm">✓ Saved to guest profile</div>
 
-    <button class="btn-generate-report" id="generateReportBtn">Generate Meeting Report</button>
-    <div class="report-output hidden" id="reportOutput">
-      <div class="report-content" id="reportContent"></div>
-      <div class="report-actions">
-        <button class="btn-copy-report" id="copyReportBtn">Copy Report</button>
-        <button class="btn-notion-push hidden" id="notionPushBtn">Push to Notion</button>
-      </div>
-      <p class="notion-push-status hidden" id="notionPushStatus"></p>
+    <!-- Script tracker -->
+    <div class="script-tracker" id="scriptTracker">
+      <div class="tracker-label">Script</div>
+      <div class="script-sections" id="scriptSections"></div>
     </div>
+
+    <!-- Transcript -->
+    <div class="transcript-wrap">
+      <div class="transcript-header">
+        <span class="section-label">Transcript</span>
+        <button class="btn-clear" id="clearTranscriptBtn">Clear</button>
+      </div>
+      <div class="transcript" id="transcript">
+        <p class="placeholder-text">Transcript will appear here...</p>
+      </div>
+    </div>
+
   </div>
 
-  <!-- BOTTOM CONTROLS -->
-  <div class="bottom-controls">
-    <button class="btn-start" id="startBtn">● Start listening</button>
-    <button class="btn-manual hidden" id="manualBtn">Help me respond</button>
-  </div>
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- STATE 3: POST-CALL                                                  -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div id="statePostCall" class="state-panel hidden">
 
-  <!-- HISTORY (hidden by default) -->
-  <section class="section history-section" id="historySection" style="display:none">
-    <div class="section-header">
-      <span class="section-label">History</span>
-      <button class="btn-toggle" id="historyToggle">▼</button>
+    <div class="post-header">
+      <div class="post-duration" id="postDuration"></div>
+      <div class="post-student-name" id="postStudentName"></div>
     </div>
-    <div class="history-list hidden" id="historyList"></div>
-  </section>
+
+    <!-- Extracted profile updates -->
+    <div class="extraction-card" id="extractionCard">
+      <div class="card-label">
+        <span>Profile updates</span>
+        <span class="card-label-sub" id="extractionStatus">Extracting...</span>
+      </div>
+      <div class="extracted-fields" id="extractedFields"></div>
+    </div>
+
+    <!-- Qualitative signals -->
+    <div class="qualitative-card">
+      <div class="card-label">Qualitative notes</div>
+      <div class="qualitative-fields" id="qualitativeFields">
+        <label class="qual-field-label">Profile summary</label>
+        <textarea class="qual-input" id="qProfileSummary" rows="2" placeholder="Who is this student..."></textarea>
+        <label class="qual-field-label">Motivation (student's words)</label>
+        <textarea class="qual-input" id="qMotivation" rows="2" placeholder="Why they want to go abroad..."></textarea>
+        <label class="qual-field-label">Constraints</label>
+        <textarea class="qual-input" id="qConstraints" rows="2" placeholder="Family, financial, timeline, emotional..."></textarea>
+        <label class="qual-field-label">Emotional notes</label>
+        <textarea class="qual-input" id="qEmotionalNotes" rows="2" placeholder="Signals for the next call..."></textarea>
+      </div>
+    </div>
+
+    <!-- Open items -->
+    <div class="open-items-card" id="openItemsCard">
+      <div class="card-label">Open items</div>
+      <div class="open-questions" id="openQuestions"></div>
+      <div class="counsellor-commitments" id="counsellorCommitments"></div>
+    </div>
+
+    <!-- Lead status -->
+    <div class="lead-status-row">
+      <label class="qual-field-label">Lead status</label>
+      <select class="lead-status-select" id="leadStatusSelect">
+        <option>New</option>
+        <option>Call 1 Done</option>
+        <option>Call 2 Done</option>
+        <option>Applied</option>
+        <option>Enrolled</option>
+      </select>
+    </div>
+
+    <!-- Report section -->
+    <div class="report-section">
+      <button class="btn-generate-report" id="generateReportBtn">Generate report</button>
+      <div class="report-output hidden" id="reportOutput">
+        <div class="report-content" id="reportContent"></div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="post-actions">
+      <button class="btn-save-notion" id="saveNotionBtn">Save to Notion</button>
+      <p class="notion-save-status hidden" id="notionSaveStatus"></p>
+      <button class="btn-new-call" id="newCallBtn">New call</button>
+    </div>
+
+  </div>
 
   <script src="themes.js"></script>
   <script src="nudge-engine.js"></script>
-  <script src="guest-context.js"></script>
   <script src="notion-sync.js"></script>
   <script src="sidepanel.js"></script>
 </body>
