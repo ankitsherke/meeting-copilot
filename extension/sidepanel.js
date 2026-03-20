@@ -1399,20 +1399,17 @@ async function triggerReport() {
       .map(i => `[${i.covered ? '✓' : ' '}] ${i.label} (${i.priority})`)
       .join('\n');
 
-    const pinnedNudgeText = pinnedNudges
-      .map(n => `[${n.type}] ${n.text}`)
-      .join('\n');
-
     const response = await fetch(`${BACKEND_URL}/report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        transcript: fullTranscript,
-        checklist: checklistState,
-        pinned_nudges: pinnedNudgeText,
-        theme_id: activeTheme?.id || 'counselling',
-        duration: getMeetingDuration(),
-        goal_achieved: document.getElementById('goalAchievedCheck').checked
+        transcript:      fullTranscript,
+        checklist_state: checklistState,
+        pinned_nudges:   pinnedNudges.map(n => ({ type: n.type, text: n.text })),
+        theme_id:        activeTheme?.id || 'counselling',
+        theme_goal:      activeTheme?.goal?.statement || '',
+        duration:        getMeetingDuration(),
+        goal_achieved:   document.getElementById('goalAchievedCheck').checked
       })
     });
 
