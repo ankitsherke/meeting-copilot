@@ -1,60 +1,67 @@
-# Meeting Copilot — Product Snapshot
+# Counsellor Assistant — Product Snapshot
 
-> Status: Working POC · Last updated: 2026-03-20 (patch)
+> Leap Scholar Hackathon · March 2026
+> Status: In build · Last updated: 2026-03-20
 
 ---
 
 ## What It Is
 
-A Chrome/Dia Extension + Python backend that acts as a real-time AI copilot during live meetings. It listens to both tab audio (guest) and your microphone (you), transcribes both streams live with speaker labels, surfaces grounded KB answers in a side panel, and provides real-time coaching nudges based on meeting type. Includes pre-meeting briefing, agenda checklist, post-meeting report generation, cross-meeting guest context, and Notion sync.
+A Chrome extension that acts as a real-time AI assistant for Leap Scholar counsellors during student counselling calls. It reads student context from Notion before the call, provides live intelligence during the call (profile flags, KB answers, script guidance, field extraction), and writes structured + qualitative data back to Notion after the call.
+
+**The tagline:** "The co-pilot captures what was asked. We capture what was said."
+
+**The reframe:** Built on the Meeting Copilot codebase. Notion replaces guest-context.js as the bidirectional student database. The theme engine strips to a single counselling config. Separate nudge cards and suggested response zones merge into one unified Assist Card.
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Chrome Extension                      │
-│                                                         │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │                  Side Panel (UI)                  │   │
-│  │                                                   │   │
-│  │  Tab capture pipeline (guest speaker):            │   │
-│  │    getUserMedia(chromeMediaSource) →              │   │
-│  │    AudioWorklet → Deepgram WS → TRANSCRIPT        │   │
-│  │                                                   │   │
-│  │  Mic capture pipeline (you):                      │   │
-│  │    getUserMedia(audio) →                          │   │
-│  │    AudioWorklet → Deepgram WS → TRANSCRIPT        │   │
-│  └──────────────────┬───────────────────────────────┘   │
-│                     │ fetch (SSE)                        │
-│  ┌──────────────────┘                                   │
-│  │  Background Service Worker                           │
-│  │    tabCapture.getMediaStreamId → returns streamId    │
-│  │    chrome.scripting.executeScript (mic iframe)       │
-│  └──────────────────────────────────────────────────────┘
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Chrome Extension                          │
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │               Side Panel (3-state UI)                  │ │
+│  │                                                        │ │
+│  │  PRE-CALL:  Notion search → student brief card         │ │
+│  │  IN-CALL:   Assist card + field tracker + transcript   │ │
+│  │  POST-CALL: Extraction review → Notion write-back      │ │
+│  │                                                        │ │
+│  │  Tab audio → Deepgram WS → guest transcript            │ │
+│  │  Mic audio → Deepgram WS → counsellor transcript       │ │
+│  └──────────┬─────────────────────────────────────────────┘ │
+│             │ fetch (SSE + JSON)                            │
+│  ┌──────────┘                                              │
+│  │  notion-sync.js ←→ Notion API (direct, no backend)     │
+│  │  background.js (tab capture, mic injection — unchanged) │
+│  └─────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
                        │
                        ▼
-        ┌──────────────────────────────┐
-        │   FastAPI Backend (Vercel)   │
-        │  POST /query  (RAG + SSE)   │
-        │  POST /brief  (briefing)    │
-        │  POST /nudge  (coaching)    │
-        │  POST /report (SSE report)  │
-        │  ┌──────────┐ ┌───────────┐  │
-        │  │ ChromaDB │ │ OpenAI    │  │
-        │  │ (cosine  │ │ GPT-4o-   │  │
-        │  │  search) │ │ mini      │  │
-        │  └──────────┘ └───────────┘  │
-        └──────────────────────────────┘
+        ┌──────────────────────────────────┐
+        │   FastAPI Backend (Vercel)        │
+        │                                  │
+        │  POST /query   (KB + student ctx)│
+        │  POST /nudge   (nudges + fields) │
+        │  POST /extract (post-call)       │
+        │  POST /report  (SSE report)      │
+        │  POST /brief   (pre-call brief)  │
+        │                                  │
+        │  ChromaDB (cosine) + OpenAI      │
+        └──────────────────────────────────┘
                        │
                        ▼
           Deepgram API (WebSocket STT)
-            Two connections per session:
-            one for tab audio (guest)
-            one for mic audio (you)
+          Notion API (direct from extension)
 ```
+
+### Key architectural decisions
+
+- **Notion calls are client-side** — CORS-friendly with integration tokens, no backend proxy needed
+- **Backend is stateless** — every `/nudge`, `/query`, `/extract` call includes full student context; backend never queries Notion
+- **Single theme** — theme engine stripped to one hardcoded counselling configuration, no selector UI
+- **Audio pipelines unchanged** — tab + mic capture via Deepgram WebSocket stays exactly as-is
 
 ---
 
@@ -62,365 +69,319 @@ A Chrome/Dia Extension + Python backend that acts as a real-time AI copilot duri
 
 ```
 /
-├── .gitignore
-├── vercel.json                    Vercel deployment config
+├── vercel.json
 ├── PRODUCT_SNAPSHOT.md
 │
 ├── extension/
-│   ├── manifest.json              Chrome MV3 manifest
-│   ├── background.js              Service worker — streamId + mic iframe injection
-│   ├── offscreen.html             Minimal shell (legacy, unused for capture)
-│   ├── offscreen.js               Legacy (tab capture moved to side panel)
-│   ├── audio-processor.js         AudioWorklet — Float32→Int16 PCM
-│   ├── request-mic-permission.html  Mic permission popup page
-│   ├── request-mic-permission.js    Mic permission popup logic
-│   ├── themes.js                  4 built-in meeting themes + getThemeById()
-│   ├── nudge-engine.js            NudgeQueue — priority, suppression, decay
-│   ├── guest-context.js           Cross-meeting guest profiles (chrome.storage)
-│   ├── notion-sync.js             Notion API integration + retry queue
-│   ├── sidepanel.html             Side panel markup
-│   ├── sidepanel.js               Side panel logic (all audio capture + UI)
-│   └── sidepanel.css              Side panel styles
+│   ├── manifest.json              Updated: name + notion host_permissions
+│   ├── background.js              Unchanged
+│   ├── audio-processor.js         Unchanged
+│   ├── request-mic-permission.*   Unchanged
+│   ├── offscreen.*                Legacy, unused
+│   ├── themes.js                  Stripped to single counselling theme + script moments
+│   ├── nudge-engine.js            Updated: 5 new types, assist card render target
+│   ├── notion-sync.js             Rewritten: search/read/update/append student records
+│   ├── sidepanel.html             Rewritten: 3-state layout
+│   ├── sidepanel.js               Rewritten: all state logic + Notion integration
+│   └── sidepanel.css              Rewritten: assist card, pills, script dots, extraction card
 │
-└── backend/
-    ├── server.py                  FastAPI app — /query, /brief, /nudge, /report
-    ├── seed_kb.py                 KB ingestion script
-    ├── requirements.txt           Python dependencies
-    ├── .env                       API keys (not committed)
-    ├── .env.example               Key template
-    ├── chroma_db/                 Persisted vector store (committed for Vercel)
-    └── docs/
-        ├── visa_requirements.md
-        ├── universities.md
-        └── scholarships.md
+├── backend/
+│   ├── server.py                  Updated: /extract new, /nudge + /query modified
+│   ├── seed_kb.py                 Unchanged (re-run with new docs)
+│   ├── requirements.txt           Unchanged
+│   ├── seed_notion.py             New: creates DB schema + seeds 5 student profiles
+│   └── docs/
+│       └── leap_kb.md             New: consolidated Leap KB (replaces 3 old docs)
+│
+└── [deleted]
+    ├── guest-context.js           Replaced by Notion
+    ├── docs/visa_requirements.md
+    ├── docs/universities.md
+    └── docs/scholarships.md
 ```
 
 ---
 
-## Component Deep-Dive
+## Notion Data Model
 
-### 1. Chrome Extension — `manifest.json`
+**Database name:** `Leap Counsellor — Students`
 
-- Manifest V3
-- Permissions: `tabCapture`, `offscreen`, `sidePanel`, `activeTab`, `tabs`, `storage`, `scripting`
-- `web_accessible_resources`: `request-mic-permission.html`, `request-mic-permission.js`
-- Host permissions: `meet.google.com`, `localhost:8000`, `https://*/*`
-- Side panel opens on extension icon click
+One row per student. The extension reads before the call and writes after.
+
+### Property schema
+
+**Identity + source** (pre-populated when lead arrives):
+
+| Property | Type | Example |
+|----------|------|---------|
+| Name | Title | Samiraj Pawar |
+| Phone | Phone | +91-98765-43210 |
+| Email | Email | samiraj@gmail.com |
+| Source Platform | Select | Google Ads / Instagram / Referral / Walk-in / Organic |
+| Source Campaign | Rich text | "UK Masters 2026" |
+| Initial Interest | Rich text | "Masters in Design, UK" |
+| Counsellor | Select | Shruti Jain |
+| Lead Status | Select | New / Call 1 Done / Call 2 Done / Applied / Enrolled |
+| Call Count | Number | 0 |
+
+**Shortlist fields** (captured during calls):
+
+| Property | Type | Required for shortlist |
+|----------|------|----------------------|
+| Country | Multi-select | Required |
+| Intake | Select | Required |
+| Budget | Rich text | Required |
+| Preferred Course | Rich text | Required |
+| Preferred Degree | Select | Required |
+| Preferred Location | Rich text | If present |
+| Work Experience (months) | Number | If present |
+| Backlog | Number | If present |
+| IELTS Score | Rich text | If present |
+| UG Score | Rich text | If present |
+| UG Specialisation | Rich text | — |
+| 12th Score | Rich text | — |
+| GRE/GMAT Score | Rich text | If present |
+| College in Mind | Rich text | If present |
+
+**Qualitative context** (written post-call):
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| Profile Summary | Rich text | Who this student is |
+| Motivation | Rich text | Student's own words on why they want to go |
+| Constraints | Rich text | Family, financial, timeline, emotional |
+| Open Questions | Rich text | Unanswered questions from the call |
+| Counsellor Commitments | Rich text | Things the counsellor promised |
+| Emotional Notes | Rich text | Signals for the next call |
+| Last Call Summary | Rich text | Auto-generated brief |
+
+**Call history** is appended to the page body (not properties) after each call:
+
+```markdown
+---
+## Call 1 — 2026-03-20, 32:15
+### Summary
+[Auto-generated narrative]
+### Fields captured
+Country: Australia, UK | Budget: ₹40-50L | Course: MDes | ...
+### Open items
+- Check post-study work visa for <18 month programs
+### Commitments
+- Send shortlist by tonight
+---
+```
 
 ---
 
-### 2. Background Service Worker — `background.js`
+## UI — Three States
 
-Lightweight — only handles two jobs:
+### State 1: Pre-call
 
-| Message | Action |
-|---------|--------|
-| `START_CAPTURE` | Calls `chrome.tabCapture.getMediaStreamId({targetTabId})` → returns `streamId` + stored Deepgram key |
-| `STOP_CAPTURE` | Clears `recordingTabId` |
-| `INJECT_MIC_IFRAME` | Uses `chrome.scripting.executeScript` to inject a hidden iframe into the active tab for mic permission (fallback flow) |
+1. Header: "Counsellor Assistant" + ⚙ settings
+2. Student search input → Notion query → dropdown (name + source + lead status)
+3. **Student brief card** on select: name, source badge, initial interest, call number
+4. **Carry-forwards panel** (Call 2+ only, amber styling): open questions, commitments, emotional notes from last call as checkboxes
+5. **Shortlist readiness bar**: N/5 required fields captured, missing fields listed
+6. Start call button
 
-**Why background doesn't handle audio**: All audio capture runs in the side panel (a visible page), so `AudioContext.destination` routes to real speakers and `getUserMedia` prompts work correctly in Dia browser.
+### State 2: In-call
 
----
+1. Recording header: red dot + elapsed timer + Stop button
+2. **Assist card** — single most important action (see below)
+3. **Field tracker** — pill wrap of shortlist fields (empty / auto-detected / confirmed)
+4. **Script tracker** — vertical list of cheat sheet moments with status dots
+5. **Transcript** — split counsellor/student bubbles, auto-scroll
 
-### 3. Theme Engine — `themes.js`
+### State 3: Post-call
 
-4 built-in meeting types, each defining:
-
-| Field | Description |
-|-------|-------------|
-| `goal` | Meeting goal statement + success signals |
-| `persona` | AI role, tone, output style, constraints |
-| `checklist` | 6 items with `autoDetectPatterns`, `priority`, `nudgeIfMissedAfter` |
-| `nudgeRules` | Enabled nudge types, custom trigger patterns, silence threshold, closing cue % |
-
-**Built-in themes:**
-
-| ID | Name | Use case |
-|----|------|----------|
-| `counselling` | Counselling | Study abroad advisor sessions |
-| `sales_close` | Sales / Close | B2B sales calls |
-| `negotiation` | Negotiation | Contract / deal negotiations |
-| `internal_sync` | Internal Sync | Team standups and planning meetings |
-
-Theme is selected pre-meeting via pill buttons and persisted to `chrome.storage.local`. Hidden during recording.
+1. Call complete header + duration + student name
+2. **Extracted profile update card** — editable fields, amber border on new/changed, shows old→new for updated values
+3. **Qualitative signals card** — editable motivation, constraints, emotional notes
+4. **Open items card** — checkboxes for unanswered questions + counsellor commitments
+5. **Profile summary** — editable narrative paragraph
+6. Action buttons: **Save to Notion** / **Generate report** / **New call**
 
 ---
 
-### 4. Nudge Engine — `nudge-engine.js`
+## Assist Card — Unified Suggestion Engine
 
-`NudgeQueue` class manages all in-meeting coaching nudges with priority, suppression, and decay.
+Replaces the separate nudge cards and suggested response zones. One card at a time. Always includes a sentence the counsellor can say directly.
 
-**Priority tiers:**
+```
+┌──────────────────────────────────────┐
+│ [TYPE BADGE]                         │
+│                                      │
+│ [Explanation — what's happening]     │
+│                                      │
+│ ┌──────────────────────────────────┐ │
+│ │ "Suggested thing to say"         │ │
+│ └──────────────────────────────────┘ │
+│                                      │
+│ [Copy]  [Dismiss]                    │
+└──────────────────────────────────────┘
+```
 
-| Priority | Types |
-|----------|-------|
-| P4 (highest) | `closing_cue`, `checklist_reminder` |
-| P3 | `kb_answer`, `objection_handler` |
-| P2 | `context_recall`, `sentiment_shift`, `goal_drift_alert` |
-| P1 (lowest) | `silence_prompt` |
+### Type badges and priority
 
-**Suppression rules:**
-- Global cooldown: max 1 nudge per 45s
-- Per-type cooldown: 3 min after display
-- After dismiss: 10 min suppression
-- 3 consecutive dismissals of same type → disabled for session
-- Candidates decay after 60s in queue if not shown
+| P | Badge | Color | Trigger |
+|---|-------|-------|---------|
+| P1 | `Profile mismatch` | Red | Student's described background doesn't fit the course being discussed |
+| P1 | `Intent divergence` | Red | Student expresses doubt while counsellor continues selling |
+| P2 | `Emotional signal` | Amber | Student shares something emotionally significant |
+| P3 | `KB answer` | Blue | Student asks a factual question → /query returns answer |
+| P3 | `Outcome profile` | Blue | Student asks a trust-building question → anonymised outcome from KB |
+| P4 | `Script nudge` | Green | Natural opening for a pending script moment, or gap warning |
+| P5 | `Field gap` | Gray | Required fields missing past 60% of call duration |
 
-**Local detectors (run in sidepanel.js):**
+### Behavior rules
 
-| Detector | Trigger |
-|----------|---------|
-| `checkObjectionPatterns` | Regex match on `nudgeRules.customTriggers` against guest transcript |
-| `startSilenceDetector` | Speech gap > `silenceThresholdSec` with user spoke recently |
-| `checkChecklistReminders` | Time-based % threshold per checklist item |
-| `checkClosingCue` | Fires once when elapsed% ≥ `closingCueAtPercent` |
-| `refreshNudges` (backend) | POST /nudge every 60s for context-aware nudges |
-
-**Nudge card UI:** type badge (color-coded), pin button, Edit & Copy (contenteditable), dismiss with suppression tracking.
+- One active card at a time. Highest-priority card shows fully, others peek (badge only)
+- KB answers interrupt any P3+ card immediately
+- Dismiss → history (collapsible, not re-surfaced)
+- 90-second cooldown per type after dismiss (P1 exempt)
+- Auto-dismiss when script tracker detects a moment was covered
+- Every card always has a "suggestion" sentence
 
 ---
 
-### 5. Side Panel — `sidepanel.js` + `sidepanel.html` + `sidepanel.css`
+## Field Tracker
 
-The side panel owns all audio pipelines and UI. It is a visible page, which enables:
-- `AudioContext.destination` → real speaker output (tab audio audible while recording)
-- `getUserMedia` → mic permission prompt works in Dia
+Shortlist fields as interactive pills. Values extracted by LLM from transcript, not manually entered.
 
-**Tab capture pipeline (guest speaker):**
-```
-background returns streamId
-  → getUserMedia({chromeMediaSource: 'tab', chromeMediaSourceId: streamId})
-  → AudioContext (native sample rate)
-    → MediaStreamSource
-      ├── → AudioContext.destination   (tab audio remains audible)
-      └── → AudioWorkletNode (pcm-processor)
-              → Deepgram WebSocket ['token', key]
-                → onmessage → handleTranscript(text, isFinal, 'guest')
-```
+**Required (5):** Country, Intake, Budget, Course, Degree
 
-**Mic capture pipeline (you):**
-```
-getUserMedia({audio: true})
-  → AudioContext
-    → AudioWorkletNode (pcm-processor)
-      → Deepgram WebSocket ['token', key]   (separate connection)
-        → onmessage → handleTranscript(text, isFinal, 'you')
-```
+**If present (7):** Location, Work exp, Backlogs, IELTS, UG score, GRE/GMAT, Colleges in mind
 
-**AudioWorklet (`audio-processor.js`):**
-- Runs off the main thread
-- Converts `Float32Array` [-1, 1] → `Int16Array` [-32768, 32767]
-- Zero-copy transfer via `postMessage(buffer, [buffer])`
+### Pill states
 
-**Deepgram WebSocket auth:**
-```js
-new WebSocket(url, ['token', DEEPGRAM_API_KEY])
-```
-Uses `Sec-WebSocket-Protocol` header — the only header browsers allow on WebSocket connections.
+| State | Styling | Shows |
+|-------|---------|-------|
+| Empty | Gray outline | Field label only |
+| Auto-detected | Amber (#FAEEDA / #FAC775) | Extracted value + "?" |
+| Confirmed | Green (#EAF3DE / #97C459) | Confirmed value |
 
-**Deepgram parameters:** `nova-2`, `linear16`, native sample rate, mono, `smart_format=true`, `interim_results=true`
-
-**Split transcript UI:**
-- `You` utterances: blue left border (`#e8f4fd` background)
-- `Guest` utterances: gray left border (`#f3f4f6` background)
-- Interim text shown in gray, finalized text in black
-- Auto-scroll on every render
-
-**Question auto-detection:**
-1. Final transcript from `guest` stream arrives
-2. Check: ends with `?` OR starts with interrogative (`what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall`)
-3. 3s debounce between consecutive queries
-4. Fire `POST /query` with last 60s of transcript + detected question + `theme_persona`
-
-**UI zones (during recording):**
-- **Hero zone**: Active nudge cards (warm yellow, stacked)
-- **Context zone**: Agenda checklist pills + live transcript
-- **Response zone**: Suggested response (streaming) + suggestion history
-
-**UI zones (pre-meeting):**
-- Theme selector pills
-- Guest name input with autocomplete
-- Guest past context card (last 3 meetings)
-- Agenda/notes textarea + Generate Brief button
-
-**Post-meeting panel:** Duration / checklist score / nudges used stats, goal achieved checkbox, guest profile save, Generate Report button, Push to Notion button.
+- Auto-detected values come from `/nudge` response `extracted_fields` (high/medium confidence only)
+- Confirmed fields from Notion (Call 2+) load as confirmed on call start
+- Counsellor click → inline edit → click away to confirm
+- Confirmed values never overwritten by auto-detection
 
 ---
 
-### 6. Guest Context Engine — `guest-context.js`
+## Script Tracker
 
-Stores cross-meeting guest profiles in `chrome.storage.local`.
+Monitors Leap cheat sheet moments. No linear enforcement — moments can be covered in any order.
 
-**Profile schema:**
-```js
-{
-  id: "john_doe",          // slugified name
-  name: "John Doe",
-  company: "Acme Corp",
-  role: "VP Sales",
-  meetings: [              // up to 20, oldest dropped
-    {
-      date: "2026-03-20",
-      theme: "sales_close",
-      duration: "00:45:00",
-      goalAchieved: true,
-      summary: "...",        // first 400 chars of report
-      actionItems: [...],
-      checklistScore: "5/6"
-    }
-  ]
-}
-```
+### Script moments
 
-**Flow:**
-1. User types guest name in prep section → debounced search (300ms, min 2 chars)
-2. Dropdown shows matching guests with last seen date + meeting count
-3. On select: loads profile, renders last 3 meetings with dates/scores/open actions
-4. After meeting: save row pre-fills guest name → creates/updates profile with meeting record
+**Section 1 — Rapport:**
+`intro_self` / `intro_purpose` / `intro_state`
+
+**Section 2 — Profiling:**
+`profile_career` / `profile_validate` / `profile_params`
+
+**Section 3 — Reaffirmation:**
+`reaffirm_conviction` / `reaffirm_colleges` / `reaffirm_similar` / `reaffirm_questions`
+
+**Section 4 — Close:**
+`close_leap` / `close_app` / `close_schedule` / `close_contact`
+
+### States
+- ● Green: Covered
+- ◐ Amber: In progress
+- ○ Gray: Not yet covered
+
+### Nudge triggers
+- Natural opening for a pending moment detected in transcript
+- Past 70% of expected duration, required moments still uncovered
+- Approaching call end, close moments haven't happened
 
 ---
 
-### 7. Pre-Meeting Briefing — `/brief` endpoint
+## Backend API Contracts
 
-**Trigger:** User pastes agenda → clicks "Generate Brief"
+### `POST /query` — KB retrieval (modified)
 
-**Backend flow:**
-1. Embed agenda text with `text-embedding-3-small`
-2. Query ChromaDB top-4 chunks (filtered by relevance threshold)
-3. Send to `gpt-4o-mini` with `response_format: json_object`
-4. Returns structured JSON:
+Adds `student_context` to request. Injects student profile into system prompt for personalised, specific answers. Returns streaming SSE (unchanged format).
 
+### `POST /nudge` — contextual nudges (modified)
+
+**Request additions:** `student_context`, `script_state`, `call_elapsed_seconds`, `expected_call_duration_seconds`
+
+**Response additions:**
 ```json
 {
-  "key_facts": ["fact 1", "fact 2", ...],
-  "likely_questions": [{"q": "...", "a": "..."}],
-  "agenda_items": [{"item": "...", "keywords": ["kw1", "kw2", ...]}]
+  "nudges": [{ "type": "profile_clarification", "priority": 1, "text": "...", "suggestion": "...", "reason": "..." }],
+  "extracted_fields": {
+    "budget": { "value": "₹40-50L", "confidence": "medium", "source_quote": "looking at 40-50 lakhs" }
+  },
+  "script_state_update": { "profile_career": "covered" }
 }
 ```
 
----
+**New nudge types:** `profile_clarification` (P1), `intent_divergence` (P1), `emotional_signal` (P2), `script_gap` (P4), `field_gap` (P5)
 
-### 8. Dynamic Nudges — `/nudge` endpoint
+### `POST /extract` — post-call extraction (new)
 
-**Trigger:** Every 60s during active recording (first call delayed 30s).
+Called once automatically when recording stops.
 
-**Request payload:**
+**Request:** full transcript + student_context (name, existing profile, call number)
+
+**Response:**
 ```json
 {
-  "transcript": "...",
-  "checklist_items": [{"id": "cl_01", "label": "...", "covered": false, "priority": "critical"}],
-  "enabled_nudge_types": ["kb_answer", "objection_handler", ...],
-  "theme_goal": "Help the student gain clarity...",
-  "theme_persona": {"role": "...", "tone": "...", "outputStyle": "...", "constraints": [...]}
+  "profile_updates": { "country": ["Australia", "UK"], "intake": "Sep 2026", "budget": "₹40-50L", ... },
+  "qualitative": { "profile_summary": "...", "motivation": "...", "constraints": "...", "emotional_notes": "..." },
+  "open_questions": ["Post-study work visa for <2yr programs", ...],
+  "counsellor_commitments": ["Send shortlist by today", ...],
+  "lead_status_suggestion": "Call 1 Done"
 }
 ```
 
-**Returns:** `{"nudges": [{"type": "<one of 8 types>", "text": "..."}]}`
+### `POST /report` — unchanged
 
-Invalid types are stripped server-side before returning.
-
----
-
-### 9. Post-Meeting Report — `/report` endpoint
-
-**Trigger:** User clicks "Generate Meeting Report" in post-meeting panel.
-
-**Request payload:**
-```json
-{
-  "transcript": "...",
-  "checklist_state": "[✓] Student profile confirmed (critical)\n[ ] Next step agreed (critical)",
-  "pinned_nudges": [{"type": "closing_cue", "text": "..."}],
-  "theme_id": "counselling",
-  "theme_goal": "...",
-  "duration": "00:32:15",
-  "goal_achieved": true
-}
-```
-
-**Returns:** Streaming SSE markdown report with sections:
-- Meeting Summary
-- Key Decisions & Commitments
-- Action Items (owner + deadline format)
-- What Went Well
-- Areas to Improve
-- Follow-Up Questions
-
-After report is generated, a "Push to Notion" button appears (if Notion is configured).
+Streaming SSE markdown report. After generation, appended to Notion page body as call history entry.
 
 ---
 
-### 10. Notion Sync — `notion-sync.js`
+## Notion Integration — `notion-sync.js` (rewritten)
 
-Pushes post-meeting reports to a Notion database.
+All Notion operations are client-side. Functions:
 
-**Setup flow:**
-1. Open Settings (⚙ in header) → enter Notion integration token → Test connection
-2. Enter database ID or click "Auto-create DB" (requires a parent page ID)
-3. After report is generated → "Push to Notion" button appears
-
-**Notion page structure:**
-
-Only the `Name` title property is written (works with any existing database — no extra columns required). All metadata is embedded as a callout block at the top of the page body:
-
-```
-📝 [callout] 📅 2026-03-20 · 🎯 Counselling · ⏱ 00:32:15 · 👤 John · ✅ Goal achieved · 📋 5/6
-## Meeting Summary
-...
-```
-
-Report body is converted from markdown to Notion blocks (headings, bullets, paragraphs, max 100 blocks).
-
-**Retry queue:** Failed pushes stored in `chrome.storage.local` under `notionRetryQueue`. Retried automatically on next panel open (up to 5 attempts per item).
+| Function | Notion API call | Purpose |
+|----------|----------------|---------|
+| `searchStudents(query)` | `POST /databases/{id}/query` | Fuzzy search by student name |
+| `getStudentProfile(pageId)` | `GET /pages/{id}` + `GET /blocks/{id}/children` | Full profile + call history |
+| `updateStudentProfile(pageId, updates)` | `PATCH /pages/{id}` | Write shortlist fields + qualitative + increment call count |
+| `appendCallHistory(pageId, report)` | `PATCH /blocks/{id}/children` | Append call section to page body |
+| `createStudent(profile)` | `POST /pages` | New student record (demo fallback) |
 
 ---
 
-### 11. FastAPI Backend — `server.py`
+## Knowledge Base — `docs/leap_kb.md`
 
-**Endpoints:**
+Single consolidated file replacing the three old docs. Sections:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | `{"status": "ok", "kb_chunks": N}` |
-| `/query` | POST | RAG pipeline → streaming SSE (theme-aware) |
-| `/brief` | POST | Agenda briefing → JSON |
-| `/nudge` | POST | 8-type in-meeting nudges → JSON |
-| `/report` | POST | Post-meeting report → streaming SSE |
+1. **Country comparison** — AU, UK, IE, DE, UAE, CA, USA, SG: duration, post-study visa, cost range (INR), part-time work rules, PR pathway
+2. **Course taxonomy** — maps non-standard student backgrounds (spatial design, culinary, fashion) to recognised course categories + known universities
+3. **Outcome profiles** — 5 anonymised past students (design→AU, CS/DS→UAE, BCA→IE, culinary→AU, CS→USA elite)
+4. **Visa and financial requirements** — Australia GTE rules, cost of living proof (₹16.5L), savings duration, sponsor/affidavit; UK CAS; Ireland; Germany blocked account
+5. **Budget benchmarks** — tuition + living cost ranges per country per program duration in INR
 
-**RAG pipeline (`/query`):**
-1. Embed `query` with `text-embedding-3-small`
-2. Query ChromaDB top-3 chunks (cosine similarity)
-3. Relevance check: `best_distance < 0.65` → KB relevant
-4. **KB path**: chunks as context → `SYSTEM_PROMPT` + theme persona suffix
-5. **Fallback path**: no context → `FALLBACK_SYSTEM_PROMPT` + theme persona suffix
-6. Stream `gpt-4o-mini` as SSE, `max_tokens=200`, `temperature=0.3`
-7. Final event: `{"sources": [...], "done": true, "fallback": bool}`
-
-**Vercel compatibility:**
-- `IS_VERCEL = bool(os.getenv("VERCEL"))`
-- On cold start: `shutil.copytree(chroma_source, '/tmp/chroma_db')` (Vercel filesystem is read-only except `/tmp`)
-- `PersistentClient` uses `/tmp/chroma_db` on Vercel, `./chroma_db` locally
+Expected ~30-40 chunks after seeding.
 
 ---
 
-### 12. Knowledge Base — `seed_kb.py` + `docs/`
+## Seed Data — 5 Student Profiles
 
-**Sample documents (study abroad domain):**
-| File | Content |
-|------|---------|
-| `visa_requirements.md` | F-1, J-1, Schengen student visas — types, documents, deadlines |
-| `universities.md` | Top study abroad universities — admission, costs, program deadlines |
-| `scholarships.md` | Fulbright, Gilman, and other scholarships — amounts, eligibility, deadlines |
+Pre-seeded in Notion via `seed_notion.py` before demo.
 
-**Ingestion pipeline:**
-- Reads `.md`, `.txt`, `.pdf` (PyMuPDF), `.docx` (python-docx)
-- Chunks by paragraph boundaries (~400 token target + 50 token overlap)
-- Embeds with `text-embedding-3-small` in batches of 20
-- Stores in ChromaDB with `hnsw:space=cosine` metric
-- Metadata: `{source: filename, chunk_index: N, total_chunks: N}`
-
-Run once: `python seed_kb.py`
+| # | Name | Profile | Failure mode tested |
+|---|------|---------|-------------------|
+| 1 | Samiraj Pawar | B.Des Fashion, 2yr spatial brand designer, fresh lead | Profile mismatch — spatial design ≠ event management |
+| 2 | Yash Mudre | B.Tech Data Science, 7.9 CGPA, ISRO intern, 2yr UPSC gap, mother in hospital | Emotional constraint + time pressure not acknowledged |
+| 3 | Jay Nagar | BCA, 5yr BPO, ₹30-35L budget but wants USA/Canada/AU | Budget-country mismatch not flagged |
+| 4 | Lokesh Kumar | IT→culinary switcher, Call 1 Done, post-study visa unclear | Critical profile fact not known before call |
+| 5 | Ranjana Krishnan | Final yr CS, targets CMU/Stanford, parents driving decision, student unsure | Unsure student pushed through funnel |
 
 ---
 
@@ -428,16 +389,14 @@ Run once: `python seed_kb.py`
 
 | Layer | Technology |
 |-------|-----------|
-| Browser extension | Chrome/Dia MV3, vanilla JS |
-| Audio capture | Web Audio API + AudioWorklet (two independent pipelines) |
+| Browser extension | Chrome MV3, vanilla JS |
+| Audio capture | Web Audio API + AudioWorklet (two pipelines — unchanged) |
 | Speech-to-text | Deepgram nova-2 (streaming WebSocket, dual connections) |
-| Vector store | ChromaDB (cosine similarity, persisted) |
+| Student database | Notion (bidirectional, client-side API calls) |
+| Vector store | ChromaDB (cosine similarity) |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | LLM | OpenAI `gpt-4o-mini` (streaming SSE) |
-| Backend | FastAPI + uvicorn |
-| Hosting | Vercel (backend) + GitHub |
-| Frontend | Vanilla JS, no framework |
-| External integrations | Notion API, Deepgram API |
+| Backend | FastAPI + uvicorn on Vercel |
 
 ---
 
@@ -447,59 +406,44 @@ Run once: `python seed_kb.py`
 |-----------|-------|-----|
 | Backend API | Vercel | `https://meeting-copilot-iota.vercel.app` |
 | Source code | GitHub | `github.com/ankitsherke/meeting-copilot` |
-| Extension | Load unpacked (Chrome/Dia) | — |
+| Extension | Load unpacked (Chrome) | — |
+| Student DB | Notion | `Leap Counsellor — Students` database |
 
-**Environment variables (set in Vercel dashboard):**
-```
-OPENAI_API_KEY=sk-...
-```
-
-**Verify live backend:**
-```bash
-curl https://meeting-copilot-iota.vercel.app/health
-# → {"status":"ok","kb_chunks":15}
-```
-
----
-
-## API Keys
+**Keys required:**
 
 | Key | Used for | Where stored |
 |-----|----------|-------------|
-| `DEEPGRAM_API_KEY` | WebSocket STT (both audio streams) | `chrome.storage.local` (entered in Settings panel) |
-| `OPENAI_API_KEY` | Embeddings + GPT-4o-mini | Vercel environment variable |
-| `NOTION_TOKEN` | Push reports to Notion | `chrome.storage.local` (entered in Settings panel) |
+| `DEEPGRAM_API_KEY` | WebSocket STT | `chrome.storage.local` (Settings panel) |
+| `OPENAI_API_KEY` | Embeddings + GPT-4o-mini | Vercel env var |
+| `notionToken` | Notion API (bidirectional) | `chrome.storage.local` (Settings panel) |
+| `notionDbId` | Lead database ID | `chrome.storage.local` (Settings panel) |
 
 ---
 
-## Running Locally
+## Setup Sequence
 
 ```bash
-# Backend
+# 1. Seed Notion database
 cd backend
-pip install -r requirements.txt
-cp .env.example .env          # fill in API keys
-python seed_kb.py             # seed knowledge base (run once)
-uvicorn server:app --reload --port 8000
+NOTION_TOKEN=xxx NOTION_PARENT_PAGE_ID=xxx python seed_notion.py
 
-# Extension
-# Chrome/Dia → chrome://extensions → Developer mode → Load unpacked → select /extension
-# Open Settings (⚙) → enter Deepgram API key → click Start
+# 2. Seed KB
+python seed_kb.py   # after placing leap_kb.md in docs/
+
+# 3. Deploy backend
+cd ..
+vercel deploy --prod
+
+# 4. Load extension
+# chrome://extensions → Developer mode → Load unpacked → /extension
+# Open Settings (⚙) → enter Deepgram key + Notion token + DB ID
 ```
-
-**Swap in your own docs:** Drop any `.md`, `.pdf`, or `.docx` files into `backend/docs/`, re-run `python seed_kb.py`, redeploy.
 
 ---
 
-## Known Limitations / Next Steps
+## What's NOT in v0
 
-| Item | Notes |
-|------|-------|
-| KB threshold (0.65) may need tuning per domain | Tune `KB_RELEVANCE_THRESHOLD` in `server.py` |
-| Sample docs are study-abroad domain | Swap for real company docs — no code changes needed |
-| Deepgram key stored in `chrome.storage.local` unencrypted | Acceptable for POC |
-| No auth on backend endpoints | Add API key middleware before production use |
-| Mic access in Chrome requires popup workaround | Works natively in Dia browser |
-| Extension loaded unpacked (not published to Chrome Web Store) | Submit to store for broader distribution |
-| ChromaDB cold-start copy on Vercel (~1s overhead) | Move to Railway/Render for always-warm server |
-| Phase 4 (Analytics) not yet built | Host performance tracking, adaptive nudge tuning |
+- Shortlist building or validation
+- Multi-counsellor assignment or handoff
+- Automated lead creation from intake forms
+- Full KB with thousands of universities (demo: 10-20 entries)
