@@ -105,25 +105,32 @@ const NotionSync = (() => {
   async function pushReport(reportData) {
     const {
       apiKey, databaseId,
-      guestName = 'Unknown', themeName = 'General', date,
+      guestName = '', themeName = 'General', date,
       duration = '—', goalAchieved = false,
       checklistScore = '—', reportMarkdown = '',
     } = reportData;
 
-    const titleText = `${guestName ? `Meeting with ${guestName}` : 'Meeting'} — ${date || new Date().toISOString().slice(0, 10)}`;
+    const today = date || new Date().toISOString().slice(0, 10);
+    const titleText = `${guestName ? `Meeting with ${guestName}` : 'Meeting'} — ${today}`;
+
+    // Metadata block prepended to page body (works with any database schema)
+    const metaBlock = {
+      object: 'block', type: 'callout',
+      callout: {
+        rich_text: [{ type: 'text', text: { content:
+          `📅 ${today}  ·  🎯 ${themeName}  ·  ⏱ ${duration}  ·  ${guestName ? `👤 ${guestName}  ·  ` : ''}${goalAchieved ? '✅ Goal achieved' : '❌ Goal not achieved'}  ·  📋 ${checklistScore}`
+        }}],
+        icon: { emoji: '📝' },
+        color: 'gray_background',
+      },
+    };
 
     const page = await _request('POST', '/pages', apiKey, {
       parent: { database_id: databaseId },
       properties: {
-        'Name':           { title: [{ type: 'text', text: { content: titleText } }] },
-        'Date':           { date: { start: date || new Date().toISOString().slice(0, 10) } },
-        'Theme':          { select: { name: themeName } },
-        'Duration':       { rich_text: [{ type: 'text', text: { content: duration } }] },
-        'Guest':          { rich_text: [{ type: 'text', text: { content: guestName } }] },
-        'Goal Achieved':  { checkbox: goalAchieved },
-        'Checklist Score':{ rich_text: [{ type: 'text', text: { content: checklistScore } }] },
+        'Name': { title: [{ type: 'text', text: { content: titleText } }] },
       },
-      children: _mdToBlocks(reportMarkdown),
+      children: [metaBlock, ...(_mdToBlocks(reportMarkdown).slice(0, 99))],
     });
 
     return page.id;
