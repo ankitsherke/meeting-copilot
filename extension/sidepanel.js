@@ -4,8 +4,11 @@
  */
 
 const BACKEND_URL = 'https://meeting-copilot-iota.vercel.app';
-const NUDGE_BACKEND_INTERVAL_MS = 45000;  // call /nudge every 45s
-const EXPECTED_CALL_DURATION_S  = 1800;   // default 30-min call
+const NUDGE_BACKEND_INTERVAL_MS  = 20000; // backstop: call /nudge every 20s
+const NUDGE_SPEECH_DEBOUNCE_MS   = 4000;  // wait 4s after speech stops before calling nudge
+const NUDGE_MIN_WORDS            = 12;    // min new words needed to trigger speech-debounce nudge
+const NUDGE_MIN_INTERVAL_MS      = 12000; // never call nudge more than once per 12s
+const EXPECTED_CALL_DURATION_S   = 1200;  // default 20-min call
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let appState = 'pre-call'; // 'pre-call' | 'in-call' | 'post-call'
@@ -28,6 +31,9 @@ let micAudioContext = null, micWorkletNode = null, micMediaStream = null, micSoc
 // Nudge
 const nudgeQueue = new NudgeQueue();
 let nudgeBackendInterval = null;
+let nudgeSpeechDebounceTimer = null;
+let wordsSinceLastNudge = 0;
+let lastNudgeCallTime = 0;
 let nudgeCallElapsed = 0;
 let activeNudge = null;
 let queuedNudges = [];
@@ -609,6 +615,8 @@ async function startRecording() {
   nudgeQueue.reset();
   queuedNudges = [];
   activeNudge = null;
+  wordsSinceLastNudge = 0;
+  lastNudgeCallTime = 0;
   initScriptState();
   if (!activeStudent) {
     resetFieldState();
@@ -656,6 +664,7 @@ function stopRecording() {
 
   clearInterval(timerInterval);
   clearInterval(nudgeBackendInterval);
+  clearTimeout(nudgeSpeechDebounceTimer);
 
   stopTabCapture();
   stopMicCapture();
@@ -802,8 +811,19 @@ function handleDeepgramMessage(event, speaker) {
     appendTranscriptBubble(text, speaker, false);
     transcriptBuffer.push({ text, speaker, timestamp: Date.now() });
 
-    // Auto-question detection on guest speech → /query
-    if (speaker === 'guest') maybeQueryBackend(text);
+    // Question detection on either speaker → /query
+    maybeQueryBackend(text);
+
+    // Speech-triggered nudge: debounce 4s after conversation pauses
+    wordsSinceLastNudge += text.split(/\s+/).filter(Boolean).length;
+    clearTimeout(nudgeSpeechDebounceTimer);
+    nudgeSpeechDebounceTimer = setTimeout(() => {
+      if (isRecording &&
+          wordsSinceLastNudge >= NUDGE_MIN_WORDS &&
+          Date.now() - lastNudgeCallTime >= NUDGE_MIN_INTERVAL_MS) {
+        callNudgeBackend();
+      }
+    }, NUDGE_SPEECH_DEBOUNCE_MS);
   } else {
     currentInterim[speaker] = text;
     updateInterimBubble(text, speaker);
@@ -910,20 +930,50 @@ async function runQuery(question) {
 // ── Nudge backend polling ──────────────────────────────────────────────────────
 async function callNudgeBackend() {
   if (!isRecording) return;
+  if (transcriptBuffer.length === 0) return;
 
-  const recentTranscript = transcriptBuffer.slice(-40).map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`).join('\n');
-  if (!recentTranscript.trim()) return;
+  lastNudgeCallTime = Date.now();
+  wordsSinceLastNudge = 0;
+
+  // transcript_recent: last 6 chunks as structured objects
+  const recentChunks = transcriptBuffer.slice(-6).map(b => ({
+    speaker: b.speaker === 'you' ? 'counsellor' : 'student',
+    text: b.text,
+    timestamp: b.timestamp,
+  }));
+
+  // transcript_full: last 80 turns as readable text
+  const transcriptFull = transcriptBuffer.slice(-80)
+    .map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`)
+    .join('\n');
+
+  // fields currently captured
+  const fieldsCaptured = {};
+  Object.entries(fieldState).forEach(([k, v]) => {
+    if (v.status !== 'empty' && v.value != null) fieldsCaptured[k] = v.value;
+  });
+
+  // types currently in cooldown (recently dismissed)
+  const now = Date.now();
+  const dismissedNudges = [...nudgeQueue.suppressedUntil.entries()]
+    .filter(([, until]) => until > now)
+    .map(([type]) => type);
 
   try {
     const data = await fetch(`${BACKEND_URL}/nudge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        transcript: recentTranscript,
+        transcript_recent: recentChunks,
+        transcript_full: transcriptFull,
         script_state: scriptState,
+        fields_captured: fieldsCaptured,
         student_context: activeStudent,
         call_elapsed_seconds: nudgeCallElapsed,
         expected_call_duration_seconds: EXPECTED_CALL_DURATION_S,
+        dismissed_nudges: dismissedNudges,
+        open_questions: [],
+        disinterest_flags: [],
       }),
     }).then(r => r.json());
 
