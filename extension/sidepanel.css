@@ -193,6 +193,12 @@ button { cursor: pointer; border: none; background: none; }
   margin-top: 5px;
 }
 
+.settings-hint {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
 /* ── State panels ──────────────────────────────────────────────────────────── */
 .state-panel { padding: 10px 12px 0; }
 

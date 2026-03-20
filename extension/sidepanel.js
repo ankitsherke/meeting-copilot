@@ -3,7 +3,8 @@
  * 3-state: pre-call → in-call → post-call
  */
 
-const BACKEND_URL = 'https://meeting-copilot-iota.vercel.app';
+const BACKEND_URL_DEFAULT = 'https://meeting-copilot-iota.vercel.app';
+let BACKEND_URL = BACKEND_URL_DEFAULT;
 const NUDGE_BACKEND_INTERVAL_MS  = 20000; // backstop: call /nudge every 20s
 const NUDGE_SPEECH_DEBOUNCE_MS   = 4000;  // wait 4s after speech stops before calling nudge
 const NUDGE_MIN_WORDS            = 12;    // min new words needed to trigger speech-debounce nudge
@@ -72,6 +73,8 @@ const notionDbInput     = document.getElementById('notionDbInput');
 const saveNotionDbBtn   = document.getElementById('saveNotionDbBtn');
 const notionTestBtn     = document.getElementById('notionTestBtn');
 const notionStatus      = document.getElementById('notionStatus');
+const backendUrlInput   = document.getElementById('backendUrlInput');
+const saveBackendUrlBtn = document.getElementById('saveBackendUrlBtn');
 const headerTitle       = document.getElementById('headerTitle');
 const statusDot         = document.getElementById('statusDot');
 const timer             = document.getElementById('timer');
@@ -146,14 +149,16 @@ const newCallBtn          = document.getElementById('newCallBtn');
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
-  const stored = await chrome.storage.local.get(['deepgramKey', 'notionKey', 'notionDbId']);
+  const stored = await chrome.storage.local.get(['deepgramKey', 'notionKey', 'notionDbId', 'backendUrl']);
   deepgramKey  = stored.deepgramKey  || '';
   notionApiKey = stored.notionKey    || '';
   notionDbId   = stored.notionDbId   || '';
+  BACKEND_URL  = stored.backendUrl   || BACKEND_URL_DEFAULT;
 
   deepgramKeyInput.value = deepgramKey  ? '••••••••' : '';
   notionKeyInput.value   = notionApiKey ? '••••••••' : '';
   notionDbInput.value    = notionDbId   || '';
+  backendUrlInput.value  = BACKEND_URL;
 
   initScriptState();
   renderFieldPills();
@@ -200,6 +205,15 @@ saveNotionDbBtn.addEventListener('click', async () => {
   await chrome.storage.local.set({ notionDbId: val });
   saveNotionDbBtn.textContent = '✓';
   setTimeout(() => { saveNotionDbBtn.textContent = 'Save'; }, 1500);
+});
+
+saveBackendUrlBtn.addEventListener('click', async () => {
+  const val = backendUrlInput.value.trim().replace(/\/$/, ''); // strip trailing slash
+  if (!val) return;
+  BACKEND_URL = val;
+  await chrome.storage.local.set({ backendUrl: val });
+  saveBackendUrlBtn.textContent = '✓';
+  setTimeout(() => { saveBackendUrlBtn.textContent = 'Save'; }, 1500);
 });
 
 notionTestBtn.addEventListener('click', async () => {
