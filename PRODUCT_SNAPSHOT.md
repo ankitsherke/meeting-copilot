@@ -1,7 +1,7 @@
 # Counsellor Assistant — Product Snapshot
 
 > Leap Scholar Hackathon · March 2026
-> Status: In build · Last updated: 2026-03-20
+> Status: Partially working · Last updated: 2026-03-20
 
 ---
 
@@ -438,6 +438,48 @@ vercel deploy --prod
 # chrome://extensions → Developer mode → Load unpacked → /extension
 # Open Settings (⚙) → enter Deepgram key + Notion token + DB ID
 ```
+
+---
+
+## Build Log — Session 2 (2026-03-20)
+
+### Bugs fixed
+
+| # | Bug | Root cause | Fix |
+|---|-----|-----------|-----|
+| 1 | "Tab capture failed: No stream ID" | sidepanel.js sent `GET_TAB_STREAM_ID` but background.js only handles `START_CAPTURE` | Changed message type |
+| 2 | Tab audio muted during capture | Chrome reroutes tab audio away from speakers when captured | Added `source.connect(tabAudioContext.destination)` |
+| 3 | Transcript not flowing | Chrome AudioContext starts suspended | Added `await tabAudioContext.resume()` + `await micAudioContext.resume()` |
+| 4 | `python` not found | macOS uses `python3` | Use `python3 seed_notion.py` |
+| 5 | `NOTION_TOKEN not set` in seed script | `.env` had `NOTION_API_KEY`, script expected `NOTION_TOKEN` | Added `NOTION_TOKEN` as duplicate entry in `.env` |
+| 6 | Python 3.9 `dict\|None` TypeError | Python 3.9 doesn't support `X\|Y` union syntax | Added `from __future__ import annotations` |
+| 7 | "Can't create databases parented by a database" | `NOTION_PARENT_PAGE_ID` was a database ID, not a page | User created blank Notion page, updated `.env` |
+| 8 | Deepgram WebSocket 1006 (both Tab + Mic) | Browser rejects `?token=KEY` URL auth for WebSockets; must use subprotocol | Changed to `new WebSocket(url, ['token', KEY])` for both sockets |
+| 9 | AudioWorklet dying mid-stream | Worklet node must be connected to an output | Added `workletNode.connect(silentDest)` for both pipelines |
+| 10 | Deepgram 1005 on stop | `socket.close()` with no args fires onclose with code 1005 — normal behaviour | Suppressed the log with `if (e.code !== 1005)` |
+
+### Current status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Mic transcription (counsellor) | ✅ Working | Deepgram connects, transcripts appear |
+| Tab transcription (guest) | 🔴 Under investigation | Diagnostics added to isolate break point |
+| Notion seed (5 profiles) | ✅ Done | `seed_notion.py` ran successfully after parent page fix |
+| KB seed | ⬜ Not run yet | Need to run `python3 seed_kb.py` |
+| Backend `/nudge`, `/query`, `/extract` | ⬜ Not tested end-to-end | Backend deployed but not validated post-rewrite |
+| Pre-call Notion search | ⬜ Not tested | Requires keys in chrome.storage |
+| Post-call extraction + write-back | ⬜ Not tested | Depends on transcript flow working |
+
+### Active debugging — tab transcription
+
+Diagnostic logs added to `startTabCapture()`:
+- `[Tab WS] sent N audio chunks, bytes=X` — confirms worklet → socket flow
+- `[Tab WS] raw message: ...` — shows if Deepgram sends any response
+
+Likely candidates for tab audio not transcribing:
+1. Tab WebSocket connecting but audio worklet outputting silence
+2. Google Meet audio routed through a separate process not captured by tabCapture
+3. Wrong tab being captured (verify `[Tab WS] Deepgram connected (guest)` appears in console)
 
 ---
 

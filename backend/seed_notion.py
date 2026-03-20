@@ -14,6 +14,7 @@ Usage:
 At the end the script prints the database ID so it can be saved to chrome.storage.
 """
 
+from __future__ import annotations
 import os
 import sys
 import json

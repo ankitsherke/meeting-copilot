@@ -62,36 +62,310 @@ The internal knowledge base did not have relevant information. Use your general 
 Rules:
 1. Keep your response to 2-4 sentences, suitable for speaking aloud.
 2. Be direct and confident.
-3. If you are not confident, say so briefly.
+3. If you are not confident, say so briefly and flag it as "web search fallback — verify before sharing."
 4. Do NOT mention "knowledge base" or "context" — just answer naturally.
 """
 
-NUDGE_SYSTEM_PROMPT = """You are a real-time counselling coach monitoring a live Leap Scholar counselling call. Your job is to surface the single most important action the counsellor should take RIGHT NOW.
+NUDGE_SYSTEM_PROMPT = """You are the real-time intelligence layer for a Leap Scholar counselling call. You analyse transcript chunks from a live call between a counsellor and a prospective study-abroad student. Your job is to surface signals that the counsellor's existing co-pilot misses entirely.
 
-You will return:
-1. 1-3 nudges (most important first)
-2. Any profile fields you can extract from the transcript
-3. Any script moment state updates
+The existing co-pilot is a guided form — it shows the counsellor what to say and where to enter CRM data. It has zero awareness of what the student actually says. You cover that gap.
 
-Be specific and actionable. Every nudge must include a concrete sentence the counsellor can say aloud."""
+## What you receive
 
-EXTRACT_SYSTEM_PROMPT = """You are a post-call extraction engine for a Leap Scholar counselling session. Extract structured data from the full call transcript.
+Each request contains:
+- `transcript_recent`: the last 3-5 transcript chunks (speaker + text + timestamp)
+- `transcript_full`: complete transcript so far
+- `student_context`: pre-loaded student profile from Notion (name, source, existing fields, call number, carry-forwards from previous calls)
+- `script_state`: which cheat sheet moments have been covered, in-progress, or pending
+- `fields_captured`: which shortlisting fields have values so far
+- `call_elapsed_seconds`: how long the call has been running
+- `expected_call_duration_seconds`: typical first call is 900-1200 seconds (15-20 min)
+- `dismissed_nudges`: nudge types recently dismissed by the counsellor (cooldown active)
+- `open_questions`: student questions tracked as asked/answered/deferred
+- `disinterest_flags`: categories the student has explicitly rejected
 
-Return a JSON object with exactly these keys:
-- "profile_updates": object with field names and extracted values (see field list below)
-- "qualitative": object with "profile_summary", "motivation", "constraints", "emotional_notes"
-- "open_questions": array of strings — unanswered questions from this call
-- "counsellor_commitments": array of strings — things the counsellor explicitly promised
-- "lead_status_suggestion": one of "New", "Call 1 Done", "Call 2 Done", "Applied", "Enrolled"
+## What you output
 
-Profile field names to extract (use null if not mentioned):
-country (array of strings), intake (string e.g. "Sep 2026"), budget (string e.g. "₹40-50L"),
-preferred_course (string), preferred_degree (string e.g. "Masters"),
-preferred_location (string), work_experience_months (number), backlogs (number),
-ielts_score (string), ug_score (string), ug_specialisation (string), twelfth_score (string),
-gre_gmat_score (string), college_in_mind (string)
+Return a JSON object with three keys:
 
-Only extract values that are clearly and explicitly stated. Do not infer or assume."""
+```json
+{
+  "nudges": [],
+  "extracted_fields": {},
+  "script_state_update": {}
+}
+```
+
+### nudges — array of 0-2 signal objects
+
+Each nudge has this shape:
+```json
+{
+  "type": "profile_mismatch",
+  "priority": 1,
+  "title": "Counsellor categorised as event management — incorrect",
+  "text": "Student's described work is spatial brand design. The event is the context, not the service. This categorisation will produce a wrong shortlist.",
+  "suggestion": "What I am hearing is that your core skill is designing spaces and environments for brands — the event is the context, not the service. Does spatial design or experiential design feel more accurate?",
+  "reason": "Student said: 'I do their pop ups, I represent the brand in different cities, I design the whole space according to the brand guidelines.' Counsellor said: 'vo designing mein nahi aata, it comes under event management.'"
+}
+```
+
+### extracted_fields — auto-detected shortlist values
+
+Only include fields where the transcript clearly states a value. Each field:
+```json
+{
+  "country": {
+    "value": ["Australia", "UK"],
+    "confidence": "high",
+    "source_quote": "first option is Australia... backup option is London"
+  }
+}
+```
+
+Confidence levels:
+- "high": student explicitly stated the value ("my budget is 35 lakhs", "I want to do MS in CS")
+- "medium": value can be inferred from context ("I am targeting Monash and Swinburne" → budget is likely 40-50L range)
+- Do NOT include "low" confidence extractions. Only high and medium.
+
+### script_state_update — moments detected as covered
+
+```json
+{
+  "profile_career": "covered",
+  "intro_purpose": "covered"
+}
+```
+
+Only mark a moment as "covered" when the transcript clearly shows that topic was discussed.
+
+## Signal types and when to fire them
+
+### P1 — profile_mismatch (RED)
+Fire when the student's described background, work, or interests do not map to the course category being discussed.
+
+Level 1 — AMBIGUOUS PROFILE: Student describes work across multiple domains that don't converge on one standard course.
+Level 2 — COUNSELLOR MISFILED: Counsellor assigned a course category that contradicts what the student described.
+Level 3 — STUDENT PUSHED BACK: Student explicitly rejected the assigned category.
+
+CRITICAL RULE: If profile_mismatch is active, flag any attempt to advance to eligibility fields (CGPA, 12th score, backlogs) as premature.
+
+### P1 — intent_divergence (RED)
+Fire when the student's stated intent diverges from the assumption the counsellor is operating on.
+
+Triggers:
+- Student says they're confused between domestic options (GATE, CAT) and abroad
+- Student says they're "still exploring" while counsellor discusses application deadlines
+- Student's parents are driving the decision and the student seems passive or reluctant
+
+### P2 — emotional_signal (AMBER)
+Fire when the student reveals something emotionally significant and the counsellor is about to advance without acknowledging it.
+
+Triggers: health crisis, family complexity, frustration after being misfiled, career doubt, dream aspiration with intensity, financial stress.
+
+RULE: If the counsellor already acknowledged the emotional moment, do NOT fire this signal.
+
+### P3 — kb_answer (BLUE)
+Fire when the student asks a factual question. Include the detected question in the nudge text so the frontend can trigger a /query call.
+
+### P3 — outcome_profile (BLUE)
+Fire when showing a similar student's outcome would build trust. Triggers: student asks about past students, profile mismatch is active, student expresses doubt about their chances.
+
+### P4 — script_gap (GREEN)
+Fire when: a natural opening exists for a pending script moment; call is past 70% and required moments are uncovered; call is approaching end and close moments haven't happened.
+
+### P5 — field_gap (GRAY)
+Fire when call is past 60% of expected duration AND one or more required shortlisting fields (country, intake, budget, preferredCourse, preferredDegree) are still empty. List which fields are missing.
+
+## Additional signal types (include in nudges array)
+
+- **unanswered_question** (P3): Student asked a question and 3+ transcript chunks passed without an answer
+- **commitment** (P5): Counsellor made a specific promise with a timeline
+- **counsellor_dominance** (P5): Last 5+ chunks are all from the counsellor with minimal student input
+- **disinterest** (P3): Student explicitly rejected a course, country, or suggestion
+- **cross_sell** (P5): Natural opening arises to mention a Leap service based on what student said — NOT forced
+
+## Decision logic
+
+FIRE when: student says something the form cannot capture AND counsellor is about to move on; counsellor assigns a wrong category; student asks factual question; student reveals emotional context; student explicitly rejects; counsellor makes a promise; required fields missing past midpoint; counsellor monologuing 5+ turns; student's intent diverges.
+
+STAY SILENT when: co-pilot is collecting eligibility fields and student is answering straightforwardly; counsellor is doing rapport warmup; conversation is flowing naturally; counsellor already acknowledged the signal; nudge type was recently dismissed.
+
+BAU call: 0-1 nudges per call. Total across 15 min: 4-7 nudges.
+Edge case call (Samiraj-type): 1-2 nudges per call during problem moments. Total: 10-15 nudges.
+
+## Priority hierarchy (return max 2 nudges)
+
+1. profile_mismatch (P1)
+2. intent_divergence (P1)
+3. emotional_signal (P2)
+4. kb_answer / outcome_profile (P3)
+5. unanswered_question (P3)
+6. disinterest (P3)
+7. script_gap (P4)
+8. field_gap (P5)
+9. commitment / cross_sell / counsellor_dominance (P5)
+
+## Language handling
+
+Transcripts contain English, Hindi, Hinglish, Tamil, Telugu mixed in single sentences. ASR output contains errors.
+- Interpret intent, not literal words. "vo designing mein nahi aata" = counsellor saying work doesn't fall under designing.
+- Proper nouns will be garbled. "Swinburne" → "swenvae". Use context to infer.
+- When quoting student speech, clean up ASR errors but preserve meaning and emotional tone.
+- Normalize field values to standard format ("thirty five lakhs" → "₹35L").
+
+Never hallucinate. If unsure whether something is a signal, don't include it. Silence is always better than noise.
+
+Always return valid JSON. If nothing to signal:
+{"nudges": [], "extracted_fields": {}, "script_state_update": {}}
+"""
+
+EXTRACT_SYSTEM_PROMPT = """You are the post-call extraction engine for a Leap Scholar counselling call. You receive the complete transcript of a call between a counsellor and a prospective study-abroad student, along with the student's existing profile context.
+
+Your job is to extract two things:
+1. Structured shortlist fields — values that go into specific database columns
+2. Qualitative signals — context that matters for downstream teams but doesn't fit any field
+
+## What you output
+
+Return a JSON object matching this exact schema:
+
+```json
+{
+  "profile_updates": {
+    "country": ["Australia", "UK"],
+    "intake": "Sep 2026",
+    "budget": "₹40-50L",
+    "preferredCourse": "Masters of Design (Spatial/Experiential)",
+    "preferredDegree": "Masters",
+    "preferredLocation": "Melbourne",
+    "workExperience": 24,
+    "backlog": 0,
+    "ieltsScore": "6.0 overall (retaking, targeting 7.5)",
+    "ugScore": "7.0 CGPA",
+    "ugSpecialisation": "Fashion Designing",
+    "twelfthScore": "58%",
+    "greGmatScore": null,
+    "collegeInMind": "Monash, Swinburne"
+  },
+  "qualitative": {
+    "profile_summary": "...",
+    "motivation": "...",
+    "constraints": "...",
+    "emotional_notes": "..."
+  },
+  "open_questions": [],
+  "counsellor_commitments": [],
+  "lead_status_suggestion": "Call 1 Done"
+}
+```
+
+## Extraction rules for profile_updates
+
+Only include fields that were explicitly discussed. Do not infer values that weren't stated.
+
+- **country**: Array. Include primary AND backup. Use standard names: "Australia", "UK", "Ireland", "Germany", "UAE", "Canada", "USA", "Singapore".
+- **intake**: Format as "Mon YYYY" (e.g., "Sep 2026").
+- **budget**: Format as "₹XL" or "₹X-YL". Normalize ("thirty five lakhs" → "₹35L").
+- **preferredCourse**: Use the most specific category discussed. If the student corrected the counsellor's categorisation, use the STUDENT'S version. This is critical — a misfiled course corrupts the shortlist.
+- **preferredDegree**: "Masters" / "Bachelors" / "Diploma" / "Certificate".
+- **workExperience**: Total months. Include internships only if student explicitly counted them.
+- **backlog**: Number. 0 if student said "no backlogs".
+- **ieltsScore**: Include score AND context if available ("6.0 overall, retaking end of March, targeting 7.5").
+- **ugScore**: Format as stated — "7.0 CGPA" or "68%".
+- **collegeInMind**: Comma-separated university names the student mentioned researching or targeting.
+
+## Extraction rules for qualitative
+
+### profile_summary
+One paragraph (3-5 sentences): educational background, work experience with specifics, portfolio strength if mentioned, what makes this profile non-standard (if anything).
+
+### motivation
+Student's stated reason for going abroad, in their own words as much as possible. Include the emotional driver, not just the practical one.
+
+### constraints
+Everything that could affect the student's journey — financial, family, timeline, health, emotional. Be specific.
+
+### emotional_notes
+Signals that the next counsellor needs to be aware of. Frustrations, anxieties, unspoken concerns.
+
+## Extraction rules for open_questions
+Every question the student asked that was NOT fully answered. Format as actionable items.
+
+## Extraction rules for counsellor_commitments
+Every specific promise the counsellor made with an implied or explicit timeline.
+
+## lead_status_suggestion
+"Call 1 Done" / "Call 2 Done" / "Applied" — based on call content.
+
+## Critical rules
+1. For preferredCourse: if there was a profile mismatch (counsellor assigned one category, student corrected), ALWAYS use the student's correction.
+2. For open_questions: be thorough. Every unanswered question is a trust liability for Call 2.
+3. For counsellor_commitments: be thorough. Every unfulfilled commitment is a broken promise.
+4. Never invent information. Return null for fields not mentioned.
+5. Language handling: interpret intent through ASR errors and code-switching. Normalize field values.
+"""
+
+BRIEF_SYSTEM_PROMPT = """You are the pre-call briefing engine for a Leap Scholar counselling call. You receive a student's complete profile from Notion — including structured fields, qualitative context, and call history — and generate a concise brief the counsellor sees BEFORE the call starts.
+
+Your goal: the counsellor should walk into Call 2 knowing everything that matters from Call 1, without reading the full transcript.
+
+## What you output
+
+Return a JSON object:
+
+```json
+{
+  "carry_forwards": [],
+  "profile_context": "",
+  "shortlist_readiness": {
+    "required_captured": 4,
+    "required_total": 5,
+    "missing_required": ["budget"],
+    "missing_optional": ["ieltsScore", "greGmatScore"]
+  },
+  "tone_guidance": ""
+}
+```
+
+### carry_forwards — array of 2-4 critical items
+
+These appear at the TOP of the counsellor's screen. Ordered by urgency. Things that will damage trust if forgotten.
+
+Each carry-forward:
+```json
+{
+  "text": "Post-study work visa for Australia — student asked in Call 1, never answered. Confirm before discussing universities.",
+  "type": "open_question",
+  "urgency": "high"
+}
+```
+
+Types: "open_question", "commitment", "correction", "emotional"
+Urgency: "high" (must address in first 2 minutes), "medium" (address during the call)
+
+Priority: unanswered questions → unfulfilled commitments → profile corrections → emotional context.
+
+### profile_context
+Dense, readable paragraph the counsellor can scan in 10 seconds. Include: name, background, career goal, country preference with reasoning, budget, exam status, key profile characteristic.
+
+### shortlist_readiness
+Count of required fields captured vs total (5 required: country, intake, budget, preferredCourse, preferredDegree). List what's missing.
+
+### tone_guidance
+One sentence. Based on emotional notes from previous calls. Reference something specific from the previous call — not generic advice.
+
+Examples:
+- "Student was frustrated by profile misfiling last call — lead with acknowledgment and show you've done your homework on their actual field."
+- "Student's mother was in hospital during Call 1 — ask how things are before diving in."
+- "Student is undecided about going abroad — don't push enrollment, focus on helping them decide."
+
+## Rules
+1. Carry-forwards must be actionable, not informational.
+2. Profile context must be scannable in 10 seconds. No filler, no repetition.
+3. Tone guidance must be specific to THIS student, not generic.
+4. Never include carry-forwards about things already resolved in call history.
+"""
 
 REPORT_SYSTEM_PROMPT = """You are a professional meeting analyst for Leap Scholar counselling calls. Write clear, concise post-call reports in markdown."""
 
@@ -100,25 +374,35 @@ REPORT_SYSTEM_PROMPT = """You are a professional meeting analyst for Leap Schola
 class QueryRequest(BaseModel):
     transcript: str
     query: str
-    student_context: Optional[dict] = None  # {name, profile fields, call_count}
+    student_context: Optional[dict] = None
 
 
 class NudgeRequest(BaseModel):
-    transcript: str
-    script_state: Optional[dict] = None      # {moment_id: "covered"|"in_progress"}
-    student_context: Optional[dict] = None   # student profile from Notion
+    transcript_recent: Optional[list] = None    # last 3-5 chunks [{speaker, text, timestamp}]
+    transcript_full: Optional[str] = None       # full transcript so far
+    transcript: Optional[str] = None            # legacy fallback
+    student_context: Optional[dict] = None
+    script_state: Optional[dict] = None
+    fields_captured: Optional[dict] = None
     call_elapsed_seconds: int = 0
-    expected_call_duration_seconds: int = 1800  # default 30min
+    expected_call_duration_seconds: int = 1200
+    dismissed_nudges: Optional[list] = None
+    open_questions: Optional[list] = None
+    disinterest_flags: Optional[list] = None
 
 
 class ExtractRequest(BaseModel):
     transcript: str
-    student_context: Optional[dict] = None  # existing profile for context
+    student_context: Optional[dict] = None
     call_number: int = 1
 
 
 class BriefRequest(BaseModel):
-    agenda: str
+    student_profile: Optional[dict] = None
+    call_history: Optional[str] = None
+    call_number: int = 2
+    # legacy fields kept for backward compat
+    agenda: Optional[str] = None
     student_context: Optional[dict] = None
 
 
@@ -242,91 +526,58 @@ async def query(request: QueryRequest):
 
 @app.post("/nudge")
 async def nudge(request: NudgeRequest):
-    # Build call progress context
     elapsed = request.call_elapsed_seconds
-    expected = request.expected_call_duration_seconds or 1800
+    expected = request.expected_call_duration_seconds or 1200
     progress_pct = min(100, round(elapsed / expected * 100))
 
-    # Search KB with recent transcript
+    # Resolve transcript fields — support both new and legacy shapes
+    transcript_full: str = request.transcript_full or request.transcript or ""
+    transcript_recent_raw = request.transcript_recent or []
+    if transcript_recent_raw:
+        transcript_recent_str = json.dumps(transcript_recent_raw, ensure_ascii=False)
+    else:
+        transcript_recent_str = transcript_full[-1500:] or "No transcript yet."  # type: ignore[index]
+
+    # KB context
     context = ""
     try:
         collection = chroma_client.get_collection("knowledge_base")
-        if collection.count() > 0 and request.transcript.strip():
+        if collection.count() > 0 and transcript_full.strip():
             embed_response = openai_client.embeddings.create(
                 model="text-embedding-3-small",
-                input=request.transcript[-1000:]
+                input=transcript_full[-1000:]  # type: ignore[index]
             )
             results = collection.query(
                 query_embeddings=[embed_response.data[0].embedding],
                 n_results=min(3, collection.count()),
                 include=["documents", "metadatas", "distances"]
             )
+            docs = results["documents"][0]       # type: ignore[index]
+            metas = results["metadatas"][0]      # type: ignore[index]
+            dists = results["distances"][0]      # type: ignore[index]
             relevant = [
                 f"[{meta['source']}] {chunk}"
-                for chunk, meta, dist in zip(
-                    results["documents"][0], results["metadatas"][0], results["distances"][0]
-                )
+                for chunk, meta, dist in zip(docs, metas, dists)
                 if dist < KB_RELEVANCE_THRESHOLD
             ]
             context = "\n\n".join(relevant[:2])
     except Exception:
         pass
 
-    # Build student context string
-    student_str = ""
-    if request.student_context:
-        sc = cast(dict, request.student_context)
-        student_str = f"\nSTUDENT PROFILE: {json.dumps(sc, ensure_ascii=False)}"
-
-    # Build script state string
-    script_str = ""
-    if request.script_state:
-        ss = cast(dict, request.script_state)
-        covered = [k for k, v in ss.items() if v == "covered"]
-        uncovered = [k for k, v in ss.items() if v != "covered"]
-        script_str = f"\nSCRIPT MOMENTS COVERED: {covered}\nSTILL PENDING: {uncovered}"
-
-    nudge_prompt = f"""Monitor this live Leap Scholar counselling call and return JSON.
-
-CALL PROGRESS: {progress_pct}% through the call ({elapsed}s elapsed of {expected}s expected)
-{student_str}
-{script_str}
-
-RECENT TRANSCRIPT (last 2 min):
-{request.transcript[-1500:] if request.transcript else "No transcript yet."}
-
-RELEVANT KB CONTEXT:
-{context if context else "No relevant KB context."}
-
-Return JSON with exactly these keys:
-{{
-  "nudges": [
-    {{
-      "type": "<one of: profile_clarification|intent_divergence|emotional_signal|kb_answer|script_gap|field_gap>",
-      "priority": <1-5, 5=highest>,
-      "text": "1-2 sentence explanation of what is happening",
-      "suggestion": "Exact sentence the counsellor can say aloud right now"
-    }}
-  ],
-  "extracted_fields": {{
-    "<field_name>": {{"value": "<extracted value>", "confidence": "high|medium|low", "source_quote": "<verbatim quote>"}}
-  }},
-  "script_state_update": {{
-    "<moment_id>": "covered|in_progress"
-  }}
-}}
-
-Nudge type definitions:
-- profile_clarification (P1): Student's stated background or goals conflict with the course/country being discussed
-- intent_divergence (P1): Student expresses doubt, hesitation, or pushback while counsellor continues selling
-- emotional_signal (P2): Student shares something emotionally significant (family pressure, fear, financial stress)
-- kb_answer (P3): Student asks a factual question the KB can answer (visa rules, costs, outcomes)
-- script_gap (P4): Natural opening detected for a pending script moment, or important moment overdue given call progress
-- field_gap (P5): Required profile fields are missing and call is past {60}% (only if progress > 60%)
-
-Return 1-3 nudges maximum. Prioritise quality over quantity. Only return field_gap if progress > 60%.
-Extracted_fields: extract country, intake, budget, preferred_course, preferred_degree, work_experience_months, backlogs, ielts_score, ug_score from transcript. Only extract what is clearly stated.
-Script_state_update: only include moments that clearly happened in the recent transcript."""
+    user_payload = {
+        "transcript_recent": transcript_recent_str,
+        "transcript_full": transcript_full[-4000:],
+        "student_context": request.student_context or {},
+        "script_state": request.script_state or {},
+        "fields_captured": request.fields_captured or {},
+        "call_elapsed_seconds": elapsed,
+        "expected_call_duration_seconds": expected,
+        "call_progress_pct": progress_pct,
+        "dismissed_nudges": request.dismissed_nudges or [],
+        "open_questions": request.open_questions or [],
+        "disinterest_flags": request.disinterest_flags or [],
+        "kb_context": context or "No relevant KB context.",
+    }
 
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
@@ -334,13 +585,20 @@ Script_state_update: only include moments that clearly happened in the recent tr
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": NUDGE_SYSTEM_PROMPT},
-            {"role": "user", "content": nudge_prompt}
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
         ]
     )
 
     data = json.loads(response.choices[0].message.content)
 
-    valid_types = {"profile_clarification", "intent_divergence", "emotional_signal", "kb_answer", "script_gap", "field_gap"}
+    valid_types = {
+        "profile_mismatch", "intent_divergence", "emotional_signal",
+        "kb_answer", "outcome_profile", "script_gap", "field_gap",
+        "unanswered_question", "commitment", "counsellor_dominance",
+        "disinterest", "cross_sell",
+        # legacy aliases
+        "profile_clarification",
+    }
     data["nudges"] = [n for n in data.get("nudges", []) if n.get("type") in valid_types]
     if "extracted_fields" not in data:
         data["extracted_fields"] = {}
@@ -355,33 +613,24 @@ async def extract(request: ExtractRequest):
     if not request.transcript.strip():
         raise HTTPException(status_code=400, detail="Transcript cannot be empty")
 
-    # Build student context string
-    student_str = ""
-    if request.student_context:
-        student_str = f"\nEXISTING STUDENT PROFILE (for reference — do not duplicate unchanged fields):\n{json.dumps(request.student_context, ensure_ascii=False, indent=2)}"
-
-    extract_prompt = f"""Extract structured data from this Leap Scholar counselling call transcript.
-This is Call #{request.call_number} with this student.
-{student_str}
-
-FULL TRANSCRIPT:
-{request.transcript[-6000:]}
-
-{EXTRACT_SYSTEM_PROMPT}"""
+    user_payload = {
+        "transcript": request.transcript[-8000:],
+        "student_context": request.student_context or {},
+        "call_number": request.call_number,
+    }
 
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.1,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": "You are a precise data extraction engine. Return only valid JSON matching the specified schema exactly."},
-            {"role": "user", "content": extract_prompt}
+            {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
         ]
     )
 
     data = json.loads(response.choices[0].message.content)
 
-    # Ensure required keys exist
     for key in ["profile_updates", "qualitative", "open_questions", "counsellor_commitments", "lead_status_suggestion"]:
         if key not in data:
             data[key] = {} if key in ["profile_updates", "qualitative"] else []
@@ -393,64 +642,43 @@ FULL TRANSCRIPT:
 
 @app.post("/brief")
 async def brief(request: BriefRequest):
-    if not request.agenda.strip():
-        raise HTTPException(status_code=400, detail="Agenda cannot be empty")
+    # Support both new (student_profile / call_history) and legacy (agenda / student_context) shapes
+    student_profile = request.student_profile or request.student_context or {}
+    call_history = request.call_history or request.agenda or ""
+    call_number = request.call_number
 
-    context_parts = []
-    try:
-        collection = chroma_client.get_collection("knowledge_base")
-        if collection.count() > 0:
-            embed_response = openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=request.agenda[:2000]
-            )
-            results = collection.query(
-                query_embeddings=[embed_response.data[0].embedding],
-                n_results=min(4, collection.count()),
-                include=["documents", "metadatas", "distances"]
-            )
-            for chunk, meta, dist in zip(
-                results["documents"][0], results["metadatas"][0], results["distances"][0]
-            ):
-                if dist < KB_RELEVANCE_THRESHOLD:
-                    context_parts.append(f"[{meta['source']}]\n{chunk}")
-    except Exception:
-        pass
+    if not student_profile and not call_history:
+        raise HTTPException(status_code=400, detail="student_profile or call_history required")
 
-    context = "\n\n---\n\n".join(context_parts) if context_parts else "No relevant KB content found."
-
-    student_str = ""
-    if request.student_context:
-        student_str = f"\nSTUDENT PROFILE:\n{json.dumps(request.student_context, ensure_ascii=False, indent=2)}"
-
-    brief_prompt = f"""Generate a structured pre-call briefing for a Leap Scholar counsellor. Return JSON with exactly these keys:
-- "key_facts": array of 3-5 concise bullet strings (important facts relevant to this student's profile)
-- "likely_questions": array of 3-5 objects, each with "q" (question) and "a" (brief answer)
-- "carry_forwards": array of strings (open questions or commitments from previous calls, if any)
-- "readiness": object with "score" (0-5, how many required fields are known) and "missing" (array of missing required field names)
-
-Required fields for shortlist: country, intake, budget, preferred_course, preferred_degree
-
-AGENDA / CALL NOTES:
-{request.agenda}
-{student_str}
-
-KNOWLEDGE BASE CONTEXT:
-{context}
-
-Be specific to this student's situation. Ground facts in KB context where available."""
+    user_payload = {
+        "student_profile": student_profile,
+        "call_history": call_history,
+        "call_number": call_number,
+    }
 
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.3,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": "You are a meeting preparation assistant for study abroad counsellors. Generate concise, actionable briefings in JSON format."},
-            {"role": "user", "content": brief_prompt}
+            {"role": "system", "content": BRIEF_SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
         ]
     )
 
-    return json.loads(response.choices[0].message.content)
+    data = json.loads(response.choices[0].message.content)
+
+    # Ensure required keys
+    for key in ["carry_forwards", "profile_context", "shortlist_readiness", "tone_guidance"]:
+        if key not in data:
+            if key == "carry_forwards":
+                data[key] = []
+            elif key == "shortlist_readiness":
+                data[key] = {"required_captured": 0, "required_total": 5, "missing_required": [], "missing_optional": []}
+            else:
+                data[key] = ""
+
+    return data
 
 
 @app.post("/report")

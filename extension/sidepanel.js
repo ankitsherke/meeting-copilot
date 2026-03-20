@@ -657,7 +657,7 @@ async function startTabCapture() {
   if (!tab?.id) throw new Error('No active tab');
 
   const streamId = await new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ type: 'GET_TAB_STREAM_ID', tabId: tab.id }, (resp) => {
+    chrome.runtime.sendMessage({ type: 'START_CAPTURE', tabId: tab.id }, (resp) => {
       if (chrome.runtime.lastError || !resp?.streamId) reject(new Error('No stream ID'));
       else resolve(resp.streamId);
     });
@@ -674,23 +674,41 @@ async function startTabCapture() {
   });
 
   tabMediaStream = stream;
-  tabAudioContext = new AudioContext({ sampleRate: 16000 });
-  await tabAudioContext.audioWorklet.addModule('audio-processor.js');
+  tabAudioContext = new AudioContext();
+  await tabAudioContext.resume();
+  const tabSampleRate = tabAudioContext.sampleRate;
+  await tabAudioContext.audioWorklet.addModule(chrome.runtime.getURL('audio-processor.js'));
   const source = tabAudioContext.createMediaStreamSource(stream);
   tabWorkletNode = new AudioWorkletNode(tabAudioContext, 'pcm-processor');
+  const tabSilentDest = tabAudioContext.createMediaStreamDestination();
   source.connect(tabWorkletNode);
+  source.connect(tabAudioContext.destination); // keep tab audio audible
+  tabWorkletNode.connect(tabSilentDest);       // keep worklet alive
 
-  tabSocket = new WebSocket(
-    `wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1&smart_format=true&token=${deepgramKey}`
-  );
+  const tabUrl = `wss://api.deepgram.com/v1/listen`
+    + `?model=nova-2&encoding=linear16&sample_rate=${tabSampleRate}&channels=1`
+    + `&smart_format=true&interim_results=true`;
+  tabSocket = new WebSocket(tabUrl, ['token', deepgramKey]); // subprotocol auth
   tabSocket.binaryType = 'arraybuffer';
   tabSocket.onopen = () => {
+    console.log('[Tab WS] Deepgram connected (guest)');
+    let tabChunkCount = 0;
     tabWorkletNode.port.onmessage = (e) => {
-      if (tabSocket.readyState === WebSocket.OPEN) tabSocket.send(e.data);
+      if (tabSocket.readyState === WebSocket.OPEN) {
+        tabSocket.send(e.data);
+        tabChunkCount++;
+        if (tabChunkCount === 1 || tabChunkCount % 100 === 0) {
+          console.log(`[Tab WS] sent ${tabChunkCount} audio chunks, bytes=${e.data.byteLength}`);
+        }
+      }
     };
   };
-  tabSocket.onmessage = (e) => handleDeepgramMessage(e, 'guest');
-  tabSocket.onerror = console.warn;
+  tabSocket.onmessage = (e) => {
+    console.log('[Tab WS] raw message:', typeof e.data === 'string' ? e.data.slice(0, 200) : '(binary)');
+    handleDeepgramMessage(e, 'guest');
+  };
+  tabSocket.onerror = (e) => console.error('[Tab WS] error', e);
+  tabSocket.onclose = (e) => { if (e.code !== 1005) console.warn('[Tab WS] closed', e.code, e.reason); };
 }
 
 function stopTabCapture() {
@@ -705,23 +723,30 @@ function stopTabCapture() {
 async function startMicCapture() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   micMediaStream = stream;
-  micAudioContext = new AudioContext({ sampleRate: 16000 });
-  await micAudioContext.audioWorklet.addModule('audio-processor.js');
+  micAudioContext = new AudioContext();
+  await micAudioContext.resume();
+  const micSampleRate = micAudioContext.sampleRate;
+  await micAudioContext.audioWorklet.addModule(chrome.runtime.getURL('audio-processor.js'));
   const source = micAudioContext.createMediaStreamSource(stream);
   micWorkletNode = new AudioWorkletNode(micAudioContext, 'pcm-processor');
+  const micSilentDest = micAudioContext.createMediaStreamDestination();
   source.connect(micWorkletNode);
+  micWorkletNode.connect(micSilentDest);
 
-  micSocket = new WebSocket(
-    `wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1&smart_format=true&token=${deepgramKey}`
-  );
+  const micUrl = `wss://api.deepgram.com/v1/listen`
+    + `?model=nova-2&encoding=linear16&sample_rate=${micSampleRate}&channels=1`
+    + `&smart_format=true&interim_results=true`;
+  micSocket = new WebSocket(micUrl, ['token', deepgramKey]);
   micSocket.binaryType = 'arraybuffer';
   micSocket.onopen = () => {
+    console.log('[Mic WS] Deepgram connected (you)');
     micWorkletNode.port.onmessage = (e) => {
       if (micSocket.readyState === WebSocket.OPEN) micSocket.send(e.data);
     };
   };
   micSocket.onmessage = (e) => handleDeepgramMessage(e, 'you');
-  micSocket.onerror = console.warn;
+  micSocket.onerror = (e) => console.error('[Mic WS] error', e);
+  micSocket.onclose = (e) => { if (e.code !== 1005) console.warn('[Mic WS] closed', e.code, e.reason); };
 }
 
 function stopMicCapture() {
