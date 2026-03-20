@@ -1,6 +1,6 @@
 # Meeting Copilot — Product Snapshot
 
-> Status: Working POC · Last updated: 2026-03-20
+> Status: Working POC · Last updated: 2026-03-20 (patch)
 
 ---
 
@@ -360,17 +360,15 @@ Pushes post-meeting reports to a Notion database.
 2. Enter database ID or click "Auto-create DB" (requires a parent page ID)
 3. After report is generated → "Push to Notion" button appears
 
-**Notion page properties created:**
+**Notion page structure:**
 
-| Property | Type |
-|----------|------|
-| Name | title — "Meeting with [Guest] — [Date]" |
-| Date | date |
-| Theme | select |
-| Duration | rich_text |
-| Guest | rich_text |
-| Goal Achieved | checkbox |
-| Checklist Score | rich_text |
+Only the `Name` title property is written (works with any existing database — no extra columns required). All metadata is embedded as a callout block at the top of the page body:
+
+```
+📝 [callout] 📅 2026-03-20 · 🎯 Counselling · ⏱ 00:32:15 · 👤 John · ✅ Goal achieved · 📋 5/6
+## Meeting Summary
+...
+```
 
 Report body is converted from markdown to Notion blocks (headings, bullets, paragraphs, max 100 blocks).
 
