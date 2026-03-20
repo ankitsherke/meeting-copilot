@@ -11,29 +11,51 @@
   <!-- Header -->
   <header class="header">
     <div class="header-left">
-      <span class="app-icon">🎙️</span>
+      <span class="logo-square">M</span>
       <span class="app-name">Meeting Copilot</span>
     </div>
     <div class="header-right">
       <span class="status-dot" id="statusDot"></span>
       <span class="status-label" id="statusLabel">Ready</span>
       <span class="timer" id="timer"></span>
+      <button class="btn-stop hidden" id="stopBtn">Stop</button>
+      <button class="btn-settings" id="settingsToggle" title="Settings">⚙</button>
     </div>
   </header>
 
-  <!-- Controls -->
-  <div class="controls">
-    <button class="btn-start" id="startBtn">▶ Start Listening</button>
-    <button class="btn-stop hidden" id="stopBtn">⏹ Stop</button>
-    <button class="btn-manual hidden" id="manualBtn" title="Manually trigger a suggestion">💡 Help Me Respond</button>
+  <!-- SETTINGS PANEL (collapsible) -->
+  <div class="settings-panel hidden" id="settingsPanel">
+    <div class="settings-section">
+      <p class="settings-label">Deepgram API Key</p>
+      <div class="settings-row">
+        <input type="password" id="deepgramKeyInput" placeholder="Enter Deepgram API key..." class="key-input settings-key-input" />
+        <button class="btn-save-inline" id="saveKeyBtn">Save</button>
+      </div>
+      <p class="settings-hint">Get a free key at <strong>deepgram.com</strong></p>
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-section">
+      <p class="settings-label">Notion Integration</p>
+      <div class="settings-row">
+        <input type="password" id="notionKeyInput" placeholder="Notion integration token..." class="key-input settings-key-input" />
+        <button class="btn-save-inline" id="saveNotionKeyBtn">Save</button>
+      </div>
+      <div class="settings-row" style="margin-top:6px">
+        <input type="text" id="notionDbInput" placeholder="Database ID (leave blank to auto-create)..." class="key-input settings-key-input" />
+        <button class="btn-save-inline" id="saveNotionDbBtn">Save</button>
+      </div>
+      <div class="settings-notion-actions">
+        <button class="btn-notion-action" id="notionTestBtn">Test connection</button>
+        <button class="btn-notion-action" id="notionCreateDbBtn">Auto-create DB</button>
+      </div>
+      <p class="settings-notion-status hidden" id="notionStatus"></p>
+    </div>
   </div>
 
   <!-- API Key Setup (shown when key is missing) -->
-  <div class="api-setup" id="apiSetup">
+  <div class="api-setup hidden" id="apiSetup">
     <p class="setup-title">⚙️ Deepgram API Key Required</p>
-    <input type="password" id="deepgramKeyInput" placeholder="Enter Deepgram API key..." class="key-input" />
-    <button class="btn-save" id="saveKeyBtn">Save Key</button>
-    <p class="setup-hint">Get a free key at <strong>deepgram.com</strong></p>
+    <p class="setup-hint">Open Settings (⚙) above to add your key.</p>
   </div>
 
   <!-- Mic Permission Banner -->
@@ -42,37 +64,64 @@
     <button class="btn-mic-allow" id="micAllowBtn">Allow Mic</button>
   </div>
 
-  <!-- Meeting Prep -->
+  <!-- NUDGE HERO ZONE (shown only when recording) -->
+  <div class="nudges-hero hidden" id="nudgesSection">
+    <div class="nudges-header">
+      <span class="nudges-label">NEXT UP</span>
+      <span class="nudge-spinner hidden" id="nudgeSpinner">⟳</span>
+    </div>
+    <div id="nudgesList">
+      <p class="nudge-empty">Listening for conversation context...</p>
+    </div>
+  </div>
+
+  <!-- AGENDA PILLS (shown when checklist loaded, active meeting) -->
+  <div id="agendaChecklist" class="hidden"></div>
+
+  <!-- THEME SELECTOR (pre-meeting only) -->
+  <div class="theme-selector" id="themeSelector">
+    <span class="section-label">Meeting Type</span>
+    <div class="theme-pills" id="themePills">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+
+  <!-- MEETING PREP SECTION -->
   <div class="meeting-prep-section" id="meetingPrepSection">
-    <div class="meeting-prep-header">
-      <span class="section-title">📋 Meeting Prep</span>
-      <button class="btn-toggle" id="meetingPrepToggle">▼</button>
+    <div id="prepInputArea">
+      <!-- Guest name field with autocomplete -->
+      <div class="guest-input-wrap" id="guestInputWrap">
+        <input type="text" id="guestNameInput" class="guest-input" placeholder="Guest name (optional)..." autocomplete="off" />
+        <div class="guest-suggestions hidden" id="guestSuggestions"></div>
+      </div>
+
+      <!-- Past context card — shown when a known guest is selected -->
+      <div class="guest-context-card hidden" id="guestContextCard">
+        <div class="guest-context-header">
+          <span class="guest-context-name" id="guestContextName"></span>
+          <span class="guest-context-meta" id="guestContextMeta"></span>
+          <button class="guest-context-clear" id="guestContextClear" title="Clear guest">✕</button>
+        </div>
+        <div class="guest-context-body" id="guestContextBody"></div>
+      </div>
+
+      <textarea id="agendaText" class="agenda-input" placeholder="Topic, agenda, notes..." rows="3"></textarea>
+      <div class="prep-buttons">
+        <button class="btn-brief" id="generateBriefBtn">Generate brief</button>
+        <button class="btn-skip" id="meetingPrepToggle">Brief ▾</button>
+      </div>
     </div>
     <div id="meetingPrepBody">
-      <div id="prepInputArea">
-        <textarea id="agendaText" class="agenda-input" placeholder="Paste meeting agenda, title, or topics..." rows="3"></textarea>
-        <button class="btn-brief" id="generateBriefBtn">Generate Brief</button>
-      </div>
       <div id="briefingCard" class="hidden">
         <div class="briefing-content" id="briefingContent"></div>
       </div>
-      <div id="agendaChecklist" class="hidden"></div>
     </div>
   </div>
 
-  <!-- Nudges -->
-  <div class="nudges-section hidden" id="nudgesSection">
-    <div class="nudges-header">
-      <span class="section-title">💡 Nudges</span>
-      <span class="nudge-spinner hidden" id="nudgeSpinner">⏳</span>
-    </div>
-    <div id="nudgesList"></div>
-  </div>
-
-  <!-- Transcript -->
-  <section class="section">
+  <!-- TRANSCRIPT -->
+  <section class="section transcript-section">
     <div class="section-header">
-      <span class="section-title">Live Transcript</span>
+      <span class="section-label">Live Transcript</span>
       <button class="btn-clear" id="clearBtn">Clear</button>
     </div>
     <div class="transcript" id="transcript">
@@ -80,30 +129,80 @@
     </div>
   </section>
 
-  <!-- Suggestion -->
-  <section class="section" id="suggestionSection" style="display:none">
+  <!-- SUGGESTED RESPONSE -->
+  <section class="section suggestion-section" id="suggestionSection" style="display:none">
     <div class="section-header">
-      <span class="section-title">💬 Suggested Response</span>
-      <span class="suggestion-spinner hidden" id="spinner">⏳</span>
-    </div>
-    <div class="suggestion-card" id="suggestionCard">
-      <div class="suggestion-text" id="suggestionText"></div>
-      <div class="suggestion-footer">
-        <span class="source-label" id="sourceLabel"></span>
+      <span class="section-label">Suggested Response</span>
+      <div class="suggestion-actions">
+        <span class="suggestion-spinner hidden" id="spinner">⟳</span>
         <button class="btn-copy" id="copyBtn">Copy</button>
       </div>
     </div>
+    <div class="suggestion-card" id="suggestionCard">
+      <div class="suggestion-text" id="suggestionText"></div>
+      <span class="source-label" id="sourceLabel"></span>
+    </div>
   </section>
 
-  <!-- Suggestion History -->
-  <section class="section" id="historySection" style="display:none">
+  <!-- POST-MEETING PANEL (hidden during recording, shown after stop) -->
+  <div class="post-meeting-panel hidden" id="postMeetingPanel">
+    <div class="post-stats">
+      <div class="stat-item">
+        <span class="stat-value" id="statDuration">—</span>
+        <span class="stat-label">Duration</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="statChecklist">—</span>
+        <span class="stat-label">Checklist</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="statNudgesUsed">—</span>
+        <span class="stat-label">Nudges Used</span>
+      </div>
+    </div>
+    <div class="post-goal-row">
+      <label class="goal-check-label">
+        <input type="checkbox" id="goalAchievedCheck" />
+        <span>Meeting goal achieved</span>
+      </label>
+    </div>
+    <!-- Save to guest profile -->
+    <div class="guest-save-row" id="guestSaveRow">
+      <input type="text" id="guestSaveInput" class="guest-save-input" placeholder="Guest name to save this meeting..." autocomplete="off" />
+      <button class="btn-save-guest" id="saveGuestBtn">Save</button>
+    </div>
+    <div class="guest-save-confirm hidden" id="guestSaveConfirm">✓ Saved to guest profile</div>
+
+    <button class="btn-generate-report" id="generateReportBtn">Generate Meeting Report</button>
+    <div class="report-output hidden" id="reportOutput">
+      <div class="report-content" id="reportContent"></div>
+      <div class="report-actions">
+        <button class="btn-copy-report" id="copyReportBtn">Copy Report</button>
+        <button class="btn-notion-push hidden" id="notionPushBtn">Push to Notion</button>
+      </div>
+      <p class="notion-push-status hidden" id="notionPushStatus"></p>
+    </div>
+  </div>
+
+  <!-- BOTTOM CONTROLS -->
+  <div class="bottom-controls">
+    <button class="btn-start" id="startBtn">● Start listening</button>
+    <button class="btn-manual hidden" id="manualBtn">Help me respond</button>
+  </div>
+
+  <!-- HISTORY (hidden by default) -->
+  <section class="section history-section" id="historySection" style="display:none">
     <div class="section-header">
-      <span class="section-title">History</span>
+      <span class="section-label">History</span>
       <button class="btn-toggle" id="historyToggle">▼</button>
     </div>
     <div class="history-list hidden" id="historyList"></div>
   </section>
 
+  <script src="themes.js"></script>
+  <script src="nudge-engine.js"></script>
+  <script src="guest-context.js"></script>
+  <script src="notion-sync.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

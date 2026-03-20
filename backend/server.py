@@ -7,6 +7,7 @@ import os
 import json
 import shutil
 from contextlib import asynccontextmanager
+from typing import cast, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -75,6 +76,7 @@ KB_RELEVANCE_THRESHOLD = 0.65
 class QueryRequest(BaseModel):
     transcript: str
     query: str
+    theme_persona: Optional[dict] = None  # {role, tone, outputStyle, constraints}
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -124,11 +126,23 @@ async def query(request: QueryRequest):
     best_distance = min(distances) if distances else float('inf')
     kb_is_relevant = best_distance < KB_RELEVANCE_THRESHOLD
 
+    # Build theme-aware system prompt suffix
+    persona_suffix = ""
+    if request.theme_persona is not None:
+        p = cast(dict, request.theme_persona)
+        constraints_str = "\n".join(f"- {c}" for c in p.get("constraints", []))
+        persona_suffix = (
+            f"\n\nMEETING ROLE: {p.get('role', '')}"
+            f"\nTONE: {p.get('tone', '')}"
+            f"\nOUTPUT STYLE: {p.get('outputStyle', '')}"
+            + (f"\nCONSTRAINTS:\n{constraints_str}" if constraints_str else "")
+        )
+
     if kb_is_relevant:
         sources = list(dict.fromkeys(m["source"] for m in metadatas))
         context_parts = [f"[Source: {meta['source']}]\n{chunk}" for chunk, meta in zip(chunks, metadatas)]
         context = "\n\n---\n\n".join(context_parts)
-        system_prompt = SYSTEM_PROMPT
+        system_prompt = SYSTEM_PROMPT + persona_suffix
         user_message = (
             f"CONTEXT:\n{context}\n\n"
             f"MEETING TRANSCRIPT (last 60 seconds):\n{request.transcript}\n\n"
@@ -137,7 +151,7 @@ async def query(request: QueryRequest):
         fallback = False
     else:
         sources = ["General Knowledge"]
-        system_prompt = FALLBACK_SYSTEM_PROMPT
+        system_prompt = FALLBACK_SYSTEM_PROMPT + persona_suffix
         user_message = (
             f"MEETING TRANSCRIPT (last 60 seconds):\n{request.transcript}\n\n"
             f"QUESTION ASKED IN MEETING: {request.query}"
@@ -243,13 +257,25 @@ Be specific and concise. Ground facts in the KB context where available."""
 
 class NudgeRequest(BaseModel):
     transcript: str
-    agenda_items: list = []
-    current_nudges: list = []
+    checklist_items: list = []        # [{id, label, covered, priority}]
+    enabled_nudge_types: list = []    # subset of the 8 types
+    theme_goal: str = ""
+    theme_persona: Optional[dict] = None
+
+
+VALID_NUDGE_TYPES = {
+    "kb_answer", "checklist_reminder", "objection_handler",
+    "silence_prompt", "goal_drift_alert", "closing_cue",
+    "context_recall", "sentiment_shift"
+}
 
 
 @app.post("/nudge")
 async def nudge(request: NudgeRequest):
-    uncovered = [a for a in request.agenda_items if not a.get("covered", False)]
+    uncovered = [i for i in request.checklist_items if not i.get("covered", False)]
+    enabled = [t for t in request.enabled_nudge_types if t in VALID_NUDGE_TYPES]
+    if not enabled:
+        enabled = list(VALID_NUDGE_TYPES)
 
     # Search KB with recent transcript
     context = ""
@@ -266,8 +292,9 @@ async def nudge(request: NudgeRequest):
                 include=["documents", "metadatas", "distances"]
             )
             relevant = [
-                str(chunk) for chunk, dist in zip(
-                    results["documents"][0], results["distances"][0]
+                f"[{meta['source']}] {chunk}"
+                for chunk, meta, dist in zip(
+                    results["documents"][0], results["metadatas"][0], results["distances"][0]
                 )
                 if dist < KB_RELEVANCE_THRESHOLD
             ]
@@ -275,38 +302,132 @@ async def nudge(request: NudgeRequest):
     except Exception:
         pass
 
-    uncovered_str = "\n".join(f"- {a['item']}" for a in uncovered) if uncovered else "All agenda items covered."
-    avoid_str = "\n".join(f"- {n}" for n in request.current_nudges) if request.current_nudges else "None"
+    uncovered_str = "\n".join(f"- {i['label']} ({i.get('priority','medium')})" for i in uncovered) if uncovered else "All checklist items covered."
+    enabled_str = ", ".join(enabled)
 
-    nudge_prompt = f"""You are a real-time meeting coach. Generate 2-3 specific, actionable nudges.
+    persona_str = ""
+    if request.theme_persona is not None:
+        tp = cast(dict, request.theme_persona)
+        persona_str = f"\nYOUR ROLE: {tp.get('role', '')}\nTONE: {tp.get('tone', '')}\nOUTPUT STYLE: {tp.get('outputStyle', '')}"
+
+    nudge_prompt = f"""You are a real-time meeting coach monitoring a live conversation.
+
+MEETING GOAL: {request.theme_goal or "Help the meeting achieve its objectives."}{persona_str}
 
 RECENT TRANSCRIPT (last 2 min):
 {request.transcript[-1500:] if request.transcript else "No transcript yet."}
 
-UNCOVERED AGENDA ITEMS:
+UNCOVERED CHECKLIST ITEMS:
 {uncovered_str}
 
 RELEVANT KB CONTEXT:
 {context if context else "No relevant KB context."}
 
-Do NOT repeat these already-shown nudges:
-{avoid_str}
+Generate 1-3 nudges using ONLY these enabled types: {enabled_str}
 
-Nudge types:
-- "agenda_gap": suggest asking about an uncovered agenda topic
-- "talking_point": surface a relevant KB fact that fits the current discussion
-- "steer": suggest redirecting if conversation is off-track
+Nudge type definitions:
+- kb_answer: Surface a relevant fact from the KB that fits the current discussion
+- checklist_reminder: Remind about an important uncovered checklist item
+- objection_handler: Suggest how to handle a concern or objection raised
+- silence_prompt: Suggest a question to break silence or re-engage
+- goal_drift_alert: Alert that conversation has drifted from the meeting goal
+- closing_cue: Signal an opportunity to close, commit, or wrap up
+- context_recall: Recall something said earlier that is relevant now
+- sentiment_shift: Flag a change in the other party's tone or sentiment
 
-Return JSON: {{"nudges": [{{"type": "agenda_gap|talking_point|steer", "text": "1-2 sentence nudge"}}]}}"""
+Return JSON: {{"nudges": [{{"type": "<one of the enabled types>", "text": "1-2 sentence actionable nudge"}}]}}"""
 
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.4,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": "You are a real-time meeting coach. Generate specific, actionable nudges in JSON format."},
+            {"role": "system", "content": "You are a real-time meeting coach. Return only valid JSON with actionable nudges."},
             {"role": "user", "content": nudge_prompt}
         ]
     )
 
-    return json.loads(response.choices[0].message.content)
+    data = json.loads(response.choices[0].message.content)
+    # Validate types — strip any invalid ones the model hallucinated
+    data["nudges"] = [n for n in data.get("nudges", []) if n.get("type") in VALID_NUDGE_TYPES]
+    return data
+
+
+# ── Report Endpoint ────────────────────────────────────────────────────────────
+
+class ReportRequest(BaseModel):
+    transcript: str
+    checklist_state: str = ""   # pre-formatted checklist lines
+    pinned_nudges: list = []    # [{type, text}]
+    theme_id: str = ""
+    theme_goal: str = ""
+    duration: str = ""          # "HH:MM:SS"
+    goal_achieved: bool = False
+
+
+@app.post("/report")
+async def report(request: ReportRequest):
+    pinned_str = "\n".join(f"- [{n.get('type','')}] {n.get('text','')}" for n in request.pinned_nudges) or "None"
+
+    report_prompt = f"""Generate a structured post-meeting report based on the data below.
+
+MEETING TYPE: {request.theme_id or "General"}
+MEETING GOAL: {request.theme_goal or "Not specified"}
+DURATION: {request.duration or "Unknown"}
+GOAL ACHIEVED: {"Yes" if request.goal_achieved else "No"}
+
+CHECKLIST STATUS:
+{request.checklist_state or "No checklist data."}
+
+PINNED NUDGES (moments the user found valuable):
+{pinned_str}
+
+FULL TRANSCRIPT:
+{request.transcript[-4000:] if request.transcript else "No transcript."}
+
+Write the report with these sections (use markdown headers):
+## Meeting Summary
+2-3 sentence overview of what was discussed and outcomes.
+
+## Key Decisions & Commitments
+Bullet list of concrete decisions made or commitments given.
+
+## Action Items
+Bullet list of next steps. Format: **[Owner]** — action — by [date if mentioned].
+
+## What Went Well
+2-3 bullets on effective moments in the meeting.
+
+## Areas to Improve
+2-3 bullets on gaps or missed opportunities (be specific, not generic).
+
+## Follow-Up Questions
+2-3 open questions that still need answers after this meeting.
+
+Keep the entire report concise and scannable. Use plain language."""
+
+    def generate():
+        try:
+            stream = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=600,
+                temperature=0.3,
+                stream=True,
+                messages=[
+                    {"role": "system", "content": "You are a professional meeting analyst. Write clear, concise post-meeting reports in markdown."},
+                    {"role": "user", "content": report_prompt}
+                ]
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield f"data: {json.dumps({'text': delta.content})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
