@@ -1,12 +1,12 @@
 # Meeting Copilot — Product Snapshot
 
-> Status: Working POC · Last updated: 2026-03-19
+> Status: Working POC · Last updated: 2026-03-20
 
 ---
 
 ## What It Is
 
-A Chrome/Dia Extension + Python backend that acts as a real-time AI assistant during live meetings. It listens to both tab audio (guest speaker) and your microphone (you), transcribes both streams live with speaker labels, detects questions, and surfaces grounded answers in a side panel — sourced from your own knowledge base, with an LLM fallback for anything not in the KB. Includes pre-meeting briefing generation and dynamic in-meeting nudges.
+A Chrome/Dia Extension + Python backend that acts as a real-time AI copilot during live meetings. It listens to both tab audio (guest) and your microphone (you), transcribes both streams live with speaker labels, surfaces grounded KB answers in a side panel, and provides real-time coaching nudges based on meeting type. Includes pre-meeting briefing, agenda checklist, post-meeting report generation, cross-meeting guest context, and Notion sync.
 
 ---
 
@@ -37,10 +37,11 @@ A Chrome/Dia Extension + Python backend that acts as a real-time AI assistant du
                        │
                        ▼
         ┌──────────────────────────────┐
-        │   FastAPI Backend (Vercel)    │
-        │  POST /query  (RAG + SSE)    │
-        │  POST /brief  (briefing)     │
-        │  POST /nudge  (coaching)     │
+        │   FastAPI Backend (Vercel)   │
+        │  POST /query  (RAG + SSE)   │
+        │  POST /brief  (briefing)    │
+        │  POST /nudge  (coaching)    │
+        │  POST /report (SSE report)  │
         │  ┌──────────┐ ┌───────────┐  │
         │  │ ChromaDB │ │ OpenAI    │  │
         │  │ (cosine  │ │ GPT-4o-   │  │
@@ -73,12 +74,16 @@ A Chrome/Dia Extension + Python backend that acts as a real-time AI assistant du
 │   ├── audio-processor.js         AudioWorklet — Float32→Int16 PCM
 │   ├── request-mic-permission.html  Mic permission popup page
 │   ├── request-mic-permission.js    Mic permission popup logic
+│   ├── themes.js                  4 built-in meeting themes + getThemeById()
+│   ├── nudge-engine.js            NudgeQueue — priority, suppression, decay
+│   ├── guest-context.js           Cross-meeting guest profiles (chrome.storage)
+│   ├── notion-sync.js             Notion API integration + retry queue
 │   ├── sidepanel.html             Side panel markup
 │   ├── sidepanel.js               Side panel logic (all audio capture + UI)
 │   └── sidepanel.css              Side panel styles
 │
 └── backend/
-    ├── server.py                  FastAPI app — /query, /brief, /nudge
+    ├── server.py                  FastAPI app — /query, /brief, /nudge, /report
     ├── seed_kb.py                 KB ingestion script
     ├── requirements.txt           Python dependencies
     ├── .env                       API keys (not committed)
@@ -118,7 +123,65 @@ Lightweight — only handles two jobs:
 
 ---
 
-### 3. Side Panel — `sidepanel.js` + `sidepanel.html` + `sidepanel.css`
+### 3. Theme Engine — `themes.js`
+
+4 built-in meeting types, each defining:
+
+| Field | Description |
+|-------|-------------|
+| `goal` | Meeting goal statement + success signals |
+| `persona` | AI role, tone, output style, constraints |
+| `checklist` | 6 items with `autoDetectPatterns`, `priority`, `nudgeIfMissedAfter` |
+| `nudgeRules` | Enabled nudge types, custom trigger patterns, silence threshold, closing cue % |
+
+**Built-in themes:**
+
+| ID | Name | Use case |
+|----|------|----------|
+| `counselling` | Counselling | Study abroad advisor sessions |
+| `sales_close` | Sales / Close | B2B sales calls |
+| `negotiation` | Negotiation | Contract / deal negotiations |
+| `internal_sync` | Internal Sync | Team standups and planning meetings |
+
+Theme is selected pre-meeting via pill buttons and persisted to `chrome.storage.local`. Hidden during recording.
+
+---
+
+### 4. Nudge Engine — `nudge-engine.js`
+
+`NudgeQueue` class manages all in-meeting coaching nudges with priority, suppression, and decay.
+
+**Priority tiers:**
+
+| Priority | Types |
+|----------|-------|
+| P4 (highest) | `closing_cue`, `checklist_reminder` |
+| P3 | `kb_answer`, `objection_handler` |
+| P2 | `context_recall`, `sentiment_shift`, `goal_drift_alert` |
+| P1 (lowest) | `silence_prompt` |
+
+**Suppression rules:**
+- Global cooldown: max 1 nudge per 45s
+- Per-type cooldown: 3 min after display
+- After dismiss: 10 min suppression
+- 3 consecutive dismissals of same type → disabled for session
+- Candidates decay after 60s in queue if not shown
+
+**Local detectors (run in sidepanel.js):**
+
+| Detector | Trigger |
+|----------|---------|
+| `checkObjectionPatterns` | Regex match on `nudgeRules.customTriggers` against guest transcript |
+| `startSilenceDetector` | Speech gap > `silenceThresholdSec` with user spoke recently |
+| `checkChecklistReminders` | Time-based % threshold per checklist item |
+| `checkClosingCue` | Fires once when elapsed% ≥ `closingCueAtPercent` |
+| `refreshNudges` (backend) | POST /nudge every 60s for context-aware nudges |
+
+**Nudge card UI:** type badge (color-coded), pin button, Edit & Copy (contenteditable), dismiss with suppression tracking.
+
+---
+
+### 5. Side Panel — `sidepanel.js` + `sidepanel.html` + `sidepanel.css`
 
 The side panel owns all audio pipelines and UI. It is a visible page, which enables:
 - `AudioContext.destination` → real speaker output (tab audio audible while recording)
@@ -168,24 +231,57 @@ Uses `Sec-WebSocket-Protocol` header — the only header browsers allow on WebSo
 1. Final transcript from `guest` stream arrives
 2. Check: ends with `?` OR starts with interrogative (`what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall`)
 3. 3s debounce between consecutive queries
-4. Fire `POST /query` with last 60s of transcript + detected question
+4. Fire `POST /query` with last 60s of transcript + detected question + `theme_persona`
 
-**Fallback display:** When backend signals `fallback: true`, source label shows "🌐 General Knowledge (not in KB)" in blue.
+**UI zones (during recording):**
+- **Hero zone**: Active nudge cards (warm yellow, stacked)
+- **Context zone**: Agenda checklist pills + live transcript
+- **Response zone**: Suggested response (streaming) + suggestion history
 
-**UI sections:**
-- Header: app name + status dot (gray/green/red/recording pulse) + timer
-- Controls: Start / Stop / "Help Me Respond" manual trigger
-- API key setup (saved to `chrome.storage.local`)
-- Mic permission banner (shown if mic access fails)
-- Meeting Prep section (collapsible): agenda input + Generate Brief button
-- Nudges section: live coaching cards with dismiss
-- Live Transcript (split You/Guest bubbles, auto-scroll)
-- Suggested Response card (streaming tokens, copy button, source label)
-- History panel (last 10 suggestions, collapsible)
+**UI zones (pre-meeting):**
+- Theme selector pills
+- Guest name input with autocomplete
+- Guest past context card (last 3 meetings)
+- Agenda/notes textarea + Generate Brief button
+
+**Post-meeting panel:** Duration / checklist score / nudges used stats, goal achieved checkbox, guest profile save, Generate Report button, Push to Notion button.
 
 ---
 
-### 4. Pre-Meeting Briefing — `/brief` endpoint
+### 6. Guest Context Engine — `guest-context.js`
+
+Stores cross-meeting guest profiles in `chrome.storage.local`.
+
+**Profile schema:**
+```js
+{
+  id: "john_doe",          // slugified name
+  name: "John Doe",
+  company: "Acme Corp",
+  role: "VP Sales",
+  meetings: [              // up to 20, oldest dropped
+    {
+      date: "2026-03-20",
+      theme: "sales_close",
+      duration: "00:45:00",
+      goalAchieved: true,
+      summary: "...",        // first 400 chars of report
+      actionItems: [...],
+      checklistScore: "5/6"
+    }
+  ]
+}
+```
+
+**Flow:**
+1. User types guest name in prep section → debounced search (300ms, min 2 chars)
+2. Dropdown shows matching guests with last seen date + meeting count
+3. On select: loads profile, renders last 3 meetings with dates/scores/open actions
+4. After meeting: save row pre-fills guest name → creates/updates profile with meeting record
+
+---
+
+### 7. Pre-Meeting Briefing — `/brief` endpoint
 
 **Trigger:** User pastes agenda → clicks "Generate Brief"
 
@@ -203,50 +299,103 @@ Uses `Sec-WebSocket-Protocol` header — the only header browsers allow on WebSo
 }
 ```
 
-**Agenda checklist:**
-- Rendered from `agenda_items` in the brief response
-- Auto-checked during meeting: ≥2 keywords from an item's `keywords` array must appear in a final transcript segment
-- Manual toggle supported
-- Coverage time recorded and displayed (e.g. `03:42`)
+---
+
+### 8. Dynamic Nudges — `/nudge` endpoint
+
+**Trigger:** Every 60s during active recording (first call delayed 30s).
+
+**Request payload:**
+```json
+{
+  "transcript": "...",
+  "checklist_items": [{"id": "cl_01", "label": "...", "covered": false, "priority": "critical"}],
+  "enabled_nudge_types": ["kb_answer", "objection_handler", ...],
+  "theme_goal": "Help the student gain clarity...",
+  "theme_persona": {"role": "...", "tone": "...", "outputStyle": "...", "constraints": [...]}
+}
+```
+
+**Returns:** `{"nudges": [{"type": "<one of 8 types>", "text": "..."}]}`
+
+Invalid types are stripped server-side before returning.
 
 ---
 
-### 5. Dynamic Nudges — `/nudge` endpoint
+### 9. Post-Meeting Report — `/report` endpoint
 
-**Trigger:** Every 50 seconds during active recording (if agenda was generated), and on manual agenda coverage changes.
+**Trigger:** User clicks "Generate Meeting Report" in post-meeting panel.
 
-**Backend flow:**
-1. Takes last 2 minutes of transcript + uncovered agenda items + already-shown nudges (to avoid repeats)
-2. Embeds transcript → KB search for relevant context
-3. GPT-4o-mini returns 2-3 typed nudges:
+**Request payload:**
+```json
+{
+  "transcript": "...",
+  "checklist_state": "[✓] Student profile confirmed (critical)\n[ ] Next step agreed (critical)",
+  "pinned_nudges": [{"type": "closing_cue", "text": "..."}],
+  "theme_id": "counselling",
+  "theme_goal": "...",
+  "duration": "00:32:15",
+  "goal_achieved": true
+}
+```
 
-| Type | Icon | Meaning |
-|------|------|---------|
-| `agenda_gap` | 🎯 | Suggest raising an uncovered agenda topic |
-| `talking_point` | 💡 | Surface a relevant KB fact |
-| `steer` | 🔄 | Suggest redirecting off-track conversation |
+**Returns:** Streaming SSE markdown report with sections:
+- Meeting Summary
+- Key Decisions & Commitments
+- Action Items (owner + deadline format)
+- What Went Well
+- Areas to Improve
+- Follow-Up Questions
 
-**Dismiss:** Each nudge card has an × button. Dismissed nudge text is sent as `current_nudges` to the next `/nudge` call so the LLM doesn't repeat it.
+After report is generated, a "Push to Notion" button appears (if Notion is configured).
 
 ---
 
-### 6. FastAPI Backend — `server.py`
+### 10. Notion Sync — `notion-sync.js`
+
+Pushes post-meeting reports to a Notion database.
+
+**Setup flow:**
+1. Open Settings (⚙ in header) → enter Notion integration token → Test connection
+2. Enter database ID or click "Auto-create DB" (requires a parent page ID)
+3. After report is generated → "Push to Notion" button appears
+
+**Notion page properties created:**
+
+| Property | Type |
+|----------|------|
+| Name | title — "Meeting with [Guest] — [Date]" |
+| Date | date |
+| Theme | select |
+| Duration | rich_text |
+| Guest | rich_text |
+| Goal Achieved | checkbox |
+| Checklist Score | rich_text |
+
+Report body is converted from markdown to Notion blocks (headings, bullets, paragraphs, max 100 blocks).
+
+**Retry queue:** Failed pushes stored in `chrome.storage.local` under `notionRetryQueue`. Retried automatically on next panel open (up to 5 attempts per item).
+
+---
+
+### 11. FastAPI Backend — `server.py`
 
 **Endpoints:**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | `{"status": "ok", "kb_chunks": N}` |
-| `/query` | POST | RAG pipeline → streaming SSE |
+| `/query` | POST | RAG pipeline → streaming SSE (theme-aware) |
 | `/brief` | POST | Agenda briefing → JSON |
-| `/nudge` | POST | In-meeting nudges → JSON |
+| `/nudge` | POST | 8-type in-meeting nudges → JSON |
+| `/report` | POST | Post-meeting report → streaming SSE |
 
 **RAG pipeline (`/query`):**
 1. Embed `query` with `text-embedding-3-small`
 2. Query ChromaDB top-3 chunks (cosine similarity)
 3. Relevance check: `best_distance < 0.65` → KB relevant
-4. **KB path**: chunks as context → `SYSTEM_PROMPT` (strict, cite sources)
-5. **Fallback path**: no context → `FALLBACK_SYSTEM_PROMPT` (general LLM)
+4. **KB path**: chunks as context → `SYSTEM_PROMPT` + theme persona suffix
+5. **Fallback path**: no context → `FALLBACK_SYSTEM_PROMPT` + theme persona suffix
 6. Stream `gpt-4o-mini` as SSE, `max_tokens=200`, `temperature=0.3`
 7. Final event: `{"sources": [...], "done": true, "fallback": bool}`
 
@@ -257,7 +406,7 @@ Uses `Sec-WebSocket-Protocol` header — the only header browsers allow on WebSo
 
 ---
 
-### 7. Knowledge Base — `seed_kb.py` + `docs/`
+### 12. Knowledge Base — `seed_kb.py` + `docs/`
 
 **Sample documents (study abroad domain):**
 | File | Content |
@@ -286,10 +435,11 @@ Run once: `python seed_kb.py`
 | Speech-to-text | Deepgram nova-2 (streaming WebSocket, dual connections) |
 | Vector store | ChromaDB (cosine similarity, persisted) |
 | Embeddings | OpenAI `text-embedding-3-small` |
-| LLM | OpenAI `gpt-4o-mini` (streaming SSE, max 200 tokens) |
+| LLM | OpenAI `gpt-4o-mini` (streaming SSE) |
 | Backend | FastAPI + uvicorn |
 | Hosting | Vercel (backend) + GitHub |
 | Frontend | Vanilla JS, no framework |
+| External integrations | Notion API, Deepgram API |
 
 ---
 
@@ -304,7 +454,6 @@ Run once: `python seed_kb.py`
 **Environment variables (set in Vercel dashboard):**
 ```
 OPENAI_API_KEY=sk-...
-DEEPGRAM_API_KEY=...
 ```
 
 **Verify live backend:**
@@ -319,8 +468,9 @@ curl https://meeting-copilot-iota.vercel.app/health
 
 | Key | Used for | Where stored |
 |-----|----------|-------------|
-| `DEEPGRAM_API_KEY` | WebSocket STT (both audio streams) | `chrome.storage.local` (entered in extension UI) |
+| `DEEPGRAM_API_KEY` | WebSocket STT (both audio streams) | `chrome.storage.local` (entered in Settings panel) |
 | `OPENAI_API_KEY` | Embeddings + GPT-4o-mini | Vercel environment variable |
+| `NOTION_TOKEN` | Push reports to Notion | `chrome.storage.local` (entered in Settings panel) |
 
 ---
 
@@ -336,7 +486,7 @@ uvicorn server:app --reload --port 8000
 
 # Extension
 # Chrome/Dia → chrome://extensions → Developer mode → Load unpacked → select /extension
-# Enter Deepgram API key in the extension UI → click Start
+# Open Settings (⚙) → enter Deepgram API key → click Start
 ```
 
 **Swap in your own docs:** Drop any `.md`, `.pdf`, or `.docx` files into `backend/docs/`, re-run `python seed_kb.py`, redeploy.
@@ -354,3 +504,4 @@ uvicorn server:app --reload --port 8000
 | Mic access in Chrome requires popup workaround | Works natively in Dia browser |
 | Extension loaded unpacked (not published to Chrome Web Store) | Submit to store for broader distribution |
 | ChromaDB cold-start copy on Vercel (~1s overhead) | Move to Railway/Render for always-warm server |
+| Phase 4 (Analytics) not yet built | Host performance tracking, adaptive nudge tuning |
