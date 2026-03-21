@@ -209,37 +209,37 @@
 
 ### 1.5 UAE (United Arab Emirates)
 
-**Master's Program Duration:** Typically 1.5–2 years. Many programs run on a trimester system (3 terms/year), allowing completion in as little as 15–18 months.
+**Popular campuses:** Dubai — University of Birmingham Dubai, Heriot-Watt Dubai, Manipal UAE, SP Jain School of Global Management. Abu Dhabi — NYU Abu Dhabi, Sorbonne Abu Dhabi, Khalifa University.
 
-**Post-Study Work Visa:**
-- No dedicated post-study work visa. After graduating, students convert their student visa to a work/employment visa once they have a job offer.
-- UAE Golden Visa (10 years): Students with very high academic merit (GPA 3.75+) from recognised universities may qualify. Also available for specialised skills in tech, research, and healthcare.
-- Most graduates transition to employer-sponsored employment visas, which is standard in the UAE's expat employment model.
+**Master's Program Duration:** 1–2 years. Many programs run on a trimester system (3 terms/year), allowing completion in as little as 15–18 months. UG programs: 3–4 years.
 
-**Typical Total Cost (INR for full program):**
-- ₹28L–₹52L for a 1.5–2 year program
-- Tuition: ₹12–20L/year; Living: ₹8–12L/year (Dubai is the most expensive; Sharjah and Abu Dhabi are more affordable)
+**Tuition:** ₹12–28L/year depending on university and program.
 
-**Cost of Living Proof / Financial Requirements:**
-- Requirements vary by university and emirate. Universities typically require proof of first-year tuition + approximately AED 20,000–30,000 (₹4.6–6.9L) for living expenses.
-- Indian bank education loans are accepted at UAE campuses of Indian universities (BITS Pilani Dubai, Manipal Dubai); loan processing is simplified for these institutions.
+**Living cost:** ₹8–14L/year (Dubai at higher end; Sharjah and Ajman significantly lower).
 
-**Part-Time Work Allowance:** Student visa does not automatically permit off-campus work. Some universities allow on-campus student employment. Off-campus work requires employer sponsorship and visa modification — complex in practice and not a reliable assumption.
+**Typical Total Cost (INR for full program):** ₹20–42L total (tuition + living combined).
 
-**Language Requirements:**
-- IELTS: 6.0–6.5 for most programs.
+**Post-Study Work:**
+- No formal post-study work visa. Graduates must convert to an employer-sponsored work visa within 30–60 days of program completion — this requires a job offer in hand.
+- UAE Golden Visa (10-year residency): Available for students with GPA 3.75+/CGPA 8.5+ from recognised universities, or exceptional talent in tech/research/healthcare. High bar — not a realistic outcome for most students.
+- Job market is strong in finance, tech, hospitality, logistics, and consulting — but competitive. Timeline to employment: typically 1–3 months for well-prepared graduates.
 
-**PR Pathway Difficulty:** Hard. UAE does not have a conventional permanent residency program. Long-term residence is through the Golden Visa (skills/merit-based) or ongoing employment visa renewals. UAE is not suitable as a primary destination for students whose primary goal is immigration-linked settlement.
+**Part-Time Work During Study:** Generally not permitted on student visa. Some free-zone universities allow limited on-campus work. Treat as zero income during studies for budgeting purposes.
 
-**Key Advantages:**
-1. No income tax; salaries in Dubai are competitive, enabling strong savings for Indian graduates who land employment
-2. Strong job market for data science, AI, fintech, and engineering graduates; particularly relevant for B.Tech CS and data science students
-3. Proximity to India (3–4 hour flight), large Indian community, culturally familiar — easiest international transition for most students
+**Language Requirements:** English medium at all major international campuses. IELTS/PTE required by most universities (6.0–6.5 overall). No blanket MOI waiver — check each university's policy individually.
 
-**Key Disadvantages:**
-1. No PR pathway — not suitable for students seeking permanent settlement abroad
-2. Work restrictions on student visa are stringent; part-time income during studies is not reliably available
-3. UAE campuses of Indian universities (BITS Pilani, Manipal) are valuable but carry less global brand recognition than the parent institution's India campus or top Western universities
+**PR Pathway:** None through the education route. UAE does not offer permanent residency for international graduates. Long-term residency possible only via Golden Visa (investment, exceptional talent) or continuous employer-sponsored residence. Not suitable for students whose primary goal is immigration or permanent settlement.
+
+**Geopolitical situation (2025–2026):** UAE (Dubai, Abu Dhabi, Sharjah) has remained stable and unaffected by broader Middle East regional conflicts. No active travel advisories from India's MEA for UAE. See Section 6.12 for full geopolitical guidance including how to handle family safety concerns on calls.
+
+**Why students choose UAE:**
+- Proximity to India (3–4 hour flight, easy family visits and emergency returns)
+- No income tax — salaries are effectively take-home
+- Culturally familiar, large Indian diaspora, Indian food and community readily available
+- Lower total cost vs. UK/Australia for comparable international brand name
+- Strong employer ecosystem in finance, AI, fintech, and logistics
+
+**Counsellor note:** UAE is the right fit for students with a clear employer target in the Gulf region, or those for whom family proximity and cost are the binding constraints. It is a poor fit for students whose primary goal is PR, post-study work flexibility, or long-term global mobility. If a student or family raises safety concerns, see Section 6.12 for the vetted response — do not dismiss the concern.
 
 ---
 
@@ -1103,15 +1103,72 @@ These are Leap-approved answers counsellors should give when these questions ari
 
 ---
 
-### 6.1 Geopolitical safety — Is it safe to go abroad right now?
+### 6.1 Geopolitical safety — Is it safe to go abroad right now? (General)
 
-**Vetted answer:** The countries we recommend for Indian students — Australia, UK, Ireland, Germany, UAE, Canada, and Singapore — are all stable and safe. None of them have active travel advisories for Indian nationals. Indian students have been studying in all these destinations throughout recent global events without any disruption to their safety, academics, or visa status.
+**Vetted answer:** The countries we recommend for Indian students — Australia, UK, Ireland, Germany, UAE, Canada, and Singapore — are all stable and safe. None have active travel advisories for Indian nationals as of early 2026. Indian students are studying in all these destinations normally with no disruption to safety, academics, or visa status.
 
-If the student is asking about Middle East tensions specifically: The UAE — particularly Dubai and Abu Dhabi — has remained fully insulated from regional tensions. UAE universities have not been disrupted in any way, and Indian students continue to arrive and study there normally.
+If the student is asking generally about whether now is a good time to go: Yes. Intake cycles, university admissions, visa processing, and flight connectivity are all normal across every destination we work with.
 
-If the student is asking generally about whether now is a good time to go: The answer is yes. Intake cycles are unaffected. University admissions, visa processing, and flight connectivity are all normal across every destination we work with.
+**Counsellor note:** Validate the concern before answering — "That's a completely fair thing to think about" — then give the facts. For UAE-specific safety questions, use Section 6.12 which has a more detailed response.
 
-**Counsellor note:** Validate the concern first — "That's a completely fair thing to think about" — then give the above facts. Do not dismiss the concern.
+---
+
+### 6.12 Geopolitical situation — Middle East, UAE safety, and what it means for study abroad (2025–2026)
+
+#### What is happening in the Middle East right now
+
+The broader Middle East has seen significant regional instability since late 2023: the Israel-Gaza conflict, Houthi attacks on Red Sea shipping routes, and periodic Iran-Israel escalation. As of early 2026, active conflict zones include Gaza, parts of Lebanon (ceasefire since late 2024), and Yemen. Israel is not a study abroad destination for Indian students.
+
+**Critical distinction: UAE is NOT in a conflict zone.**
+
+UAE (Dubai, Abu Dhabi, Sharjah) sits in the southern Gulf and is geographically and diplomatically separated from the conflict areas. UAE maintains active diplomatic relationships with all major global blocs — it is one of the most stable business and education environments in the world. No travel advisories from India's MEA, UK FCO, or Australian DFAT for UAE as of early 2026.
+
+#### What this means for UAE specifically
+
+UAE universities are operating normally. Student intakes are proceeding. The Indian student and expat community — one of the largest in the world — continues to live, work, and study there with no disruption.
+
+**Two real concerns students and families raise (address honestly):**
+
+**1. "Is it physically safe to be in Dubai if the region escalates?"**
+Honest answer: UAE has remained stable through every prior cycle of regional conflict in the past 20+ years. It is not in a conflict zone. Risk perception significantly exceeds actual risk. That said, no one can guarantee the future with certainty. For families who are extremely risk-averse, acknowledge this is a genuine concern — and offer to prioritise a UK or Australia option so UAE is a backup, not a necessity.
+
+**2. "If I'm placed in UAE after graduation and the region destabilises, is my job secure?"**
+Honest answer: This is a real medium-term risk, not hypothetical. UAE's economy has shown strong resilience — driven by EXPO 2020 legacy infrastructure, tourism recovery, and sustained foreign investment. However, UAE's job market is sensitive to global oil prices and regional FDI confidence. A major escalation would likely affect hiring timelines and employer confidence. Students should factor this in, especially if planning a 3–5 year career horizon in UAE.
+
+#### What this means for other Middle East destinations
+
+| Destination | Status | Relevant for Indian students? |
+|---|---|---|
+| UAE (Dubai, Abu Dhabi) | Stable, unaffected | Yes — primary Gulf destination |
+| Qatar | Stable | Emerging — Education City campuses |
+| Jordan / Egypt | Not conflict zones | Not major study destinations |
+| Israel | Active conflict | Not relevant for Indian students |
+| Saudi Arabia | Stable | Very early stage — not in current counsellor scope |
+| Lebanon | Ceasefire in place | Not a study destination |
+| Yemen | Active conflict | Not relevant |
+
+#### How to handle this on a call
+
+**If student or parent raises UAE safety concern:**
+> "Dubai and Abu Dhabi are genuinely separate from the conflict zones — they're in the southern Gulf, well outside the affected areas. They've stayed stable and functional through every regional flare-up in the last decade. That said, I understand why your family might be worried — it's worth having that conversation with them directly. What I can tell you is that the Indian student community there is huge, the universities have full emergency protocols, and there are no travel advisories in place."
+
+**If family has a blanket "Middle East = unsafe" objection:**
+> "That's a completely understandable instinct. If UAE feels uncertain for your family, let's make sure we have a strong UK or Australia option as your primary. UAE can be a backup — or we drop it entirely. There's no reason to push it if the family isn't comfortable."
+
+**Do not:** Dismiss the concern, over-reassure, or cite news the counsellor hasn't personally verified. Treat this as an emotional and family constraint signal — flag it in the student notes.
+
+#### Knock-on effects on other study destinations
+
+- **UK:** No direct impact from Middle East situation. Remains the leading alternative for Gulf-focused students. Visa processing times stable.
+- **Australia:** Red Sea shipping disruption has marginally increased some import costs — immaterial impact on student cost-of-living estimates.
+- **Canada:** Not impacted by Middle East situation. Has separate study permit cap issues (see counsellor briefings).
+- **Germany, Ireland, Singapore:** No impact.
+
+#### Counsellor watchlist
+
+- Monitor India MEA travel advisory updates if Iran-Israel situation escalates significantly
+- UAE student visa policy: currently stable, no announced changes
+- Oil price scenarios: a sustained crash below USD 50/barrel would affect UAE hiring environment — monitor if recommending UAE for job-dependent students
 
 ---
 
