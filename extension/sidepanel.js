@@ -729,6 +729,8 @@ async function startRecording() {
   activeNudge = null;
   wordsSinceLastNudge = 0;
   lastNudgeCallTime = 0;
+  lastQueryTime = 0;
+  hotQueryFired = '';
   initScriptState();
   if (!activeStudent) {
     resetFieldState();
@@ -942,6 +944,8 @@ function handleDeepgramMessage(event, speaker) {
   } else {
     currentInterim[speaker] = text;
     updateInterimBubble(text, speaker);
+    // Hot-trigger KB lookup on guest interim — fires while student is still speaking
+    if (speaker === 'guest') maybeHotQuery(text);
   }
 }
 
@@ -983,19 +987,40 @@ function updateInterimBubble(text, speaker) {
 clearTranscriptBtn.addEventListener('click', clearTranscript);
 
 // ── Question detection → /query ────────────────────────────────────────────────
-const QUESTION_STARTERS = /^(what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall)\b/i;
-let lastQueryTime = 0;
-const QUERY_DEBOUNCE_MS = 4000;
-
+const QUESTION_STARTERS   = /^(what|how|when|where|why|who|which|can|could|do|does|did|is|are|was|were|will|would|should|shall)\b/i;
 const NON_FACTUAL_PATTERNS = /\b(what the|wtf|seriously|really\?|right\?|isn't it|don't you|are you sure|you know what|i mean|like what|have you said|are you kidding|what do you mean)\b/i;
-const EMOTIONAL_STARTERS = /^(oh|wow|really|seriously|wait|no|yes|okay|ok|hmm|ugh|so|but|and|well|i think|i feel|i just)\b/i;
+const EMOTIONAL_STARTERS  = /^(oh|wow|really|seriously|wait|no|yes|okay|ok|hmm|ugh|so|but|and|well|i think|i feel|i just)\b/i;
 
+// Topics that should trigger an immediate KB lookup — fire on interim transcript
+const KB_HOT_KEYWORDS = /\b(scholarship|scholarships|fellowship|grant|funding|financial aid|visa|ielts|pte|gre|gmat|toefl|duolingo|cost|fees|tuition|living expense|living cost|loan|education loan|bank|sbi|hdfc|credila|avanse|incred|pr|permanent residen|settle|settlement|post.?study|work permit|work visa|graduate visa|budget|salary|job|employment|hire|placement|intake|deadline|application deadline|requirement|eligib|cgpa|percentage|backlog|arrear|waiver|moi|medium of instruction|safe|safety|geopoliti|war|conflict|tension|duration|how long|which country|best country|better country|australia|canada|ireland|germany|uk|united kingdom|uae|dubai|singapore|usa|united states|america|new zealand)\b/i;
+
+let lastQueryTime   = 0;
+let hotQueryFired   = '';   // tracks the interim text that already triggered a hot query
+const QUERY_DEBOUNCE_MS     = 8000;  // min gap between /query calls
+const HOT_QUERY_MIN_WORDS   = 4;     // min words before hot-triggering
+
+// Hot trigger: fires on INTERIM guest transcript when KB keyword detected
+// This starts the fetch while student is still speaking → answer ready faster
+function maybeHotQuery(interimText) {
+  if (!interimText || interimText === hotQueryFired) return;
+  if (interimText.split(' ').filter(Boolean).length < HOT_QUERY_MIN_WORDS) return;
+  if (!KB_HOT_KEYWORDS.test(interimText)) return;
+  if (NON_FACTUAL_PATTERNS.test(interimText)) return;
+  if (Date.now() - lastQueryTime < QUERY_DEBOUNCE_MS) return;
+  hotQueryFired = interimText;
+  lastQueryTime = Date.now();
+  runQuery(interimText);
+}
+
+// Final-transcript fallback: catches questions that don't have hot keywords
 function maybeQueryBackend(text) {
   const isQuestion = text.endsWith('?') || QUESTION_STARTERS.test(text);
   if (!isQuestion) return;
   if (NON_FACTUAL_PATTERNS.test(text)) return;
   if (EMOTIONAL_STARTERS.test(text)) return;
   if (text.split(' ').filter(Boolean).length < 5) return;
+  // Skip if a hot query already fired for very similar text (same root words)
+  if (hotQueryFired && text.startsWith(hotQueryFired.slice(0, 20))) { hotQueryFired = ''; return; }
   if (Date.now() - lastQueryTime < QUERY_DEBOUNCE_MS) return;
   lastQueryTime = Date.now();
   runQuery(text);
