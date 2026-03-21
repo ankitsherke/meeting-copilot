@@ -399,7 +399,20 @@ Examples:
 4. Never include carry-forwards about things already resolved in call history.
 """
 
-REPORT_SYSTEM_PROMPT = """You are a professional meeting analyst for Leap Scholar counselling calls. Write clear, concise post-call reports in markdown."""
+REPORT_SYSTEM_PROMPT = """You are a senior Leap Scholar counselling manager writing a detailed post-call report from a counselling session transcript and captured data.
+
+Your report must be thorough, structured, and immediately useful for:
+1. The counsellor reviewing the call before the next session
+2. A manager auditing call quality
+3. The Notion CRM record for this student
+
+Rules:
+- Write in clear, professional English. No filler.
+- Use the transcript as ground truth — quote the student directly (in italics) when capturing their actual words about motivation, concerns, or decisions.
+- If a field is not mentioned in the transcript, mark it as "Not discussed" — do not invent data.
+- Flag contradictions between what the student said and their existing Notion profile.
+- Every section must be substantive. Never write a section with only "None" or "N/A" — if nothing was said, briefly explain why or what to address next call.
+- Use markdown formatting throughout."""
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
@@ -440,11 +453,18 @@ class BriefRequest(BaseModel):
 
 class ReportRequest(BaseModel):
     transcript: str
+    duration: str = ""
+    call_number: int = 1
+    student_profile: Optional[dict] = None
+    fields_captured: Optional[dict] = None      # fieldState at end of call
+    extracted_fields: Optional[dict] = None     # post-call AI extraction
+    script_state: Optional[dict] = None         # which script moments were covered
+    qualitative: Optional[dict] = None          # counsellor's manual notes
+    nudges_fired: list = []                     # KB answers / nudges shown during call
+    theme_goal: str = ""
     checklist_state: str = ""
     pinned_nudges: list = []
     theme_id: str = ""
-    theme_goal: str = ""
-    duration: str = ""
     goal_achieved: bool = False
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -716,47 +736,151 @@ async def brief(request: BriefRequest):
 
 @app.post("/report")
 async def report(request: ReportRequest):
-    pinned_str = "\n".join(f"- [{n.get('type','')}] {n.get('text','')}" for n in request.pinned_nudges) or "None"
+    # ── Build context blocks ───────────────────────────────────────────────────
+    profile = request.student_profile or {}
+    qual    = request.qualitative or {}
+    fields  = request.fields_captured or {}
+    extracted = request.extracted_fields or {}
+    script  = request.script_state or {}
 
-    report_prompt = f"""Generate a structured post-call report for a Leap Scholar counselling session.
+    # Student background block
+    profile_lines = []
+    for k, v in profile.items():
+        if v and k not in ('callHistory', 'id', 'page_id'):
+            profile_lines.append(f"  {k}: {v}")
+    profile_block = "\n".join(profile_lines) or "  No prior profile data."
 
-MEETING TYPE: Counselling
-MEETING GOAL: {request.theme_goal or "Help student clarify study abroad path"}
-DURATION: {request.duration or "Unknown"}
-GOAL ACHIEVED: {"Yes" if request.goal_achieved else "No"}
+    # Fields captured during call
+    fields_lines = []
+    for field, info in fields.items():
+        if isinstance(info, dict) and info.get('value'):
+            status = info.get('status', '')
+            fields_lines.append(f"  {field}: {info['value']} [{status}]")
+    fields_block = "\n".join(fields_lines) or "  No fields captured."
 
-CHECKLIST STATUS:
-{request.checklist_state or "No checklist data."}
+    # AI-extracted fields
+    extracted_lines = []
+    for field, info in extracted.items():
+        if isinstance(info, dict) and info.get('value'):
+            extracted_lines.append(f"  {field}: {info['value']} (confidence: {info.get('confidence','?')})")
+    extracted_block = "\n".join(extracted_lines) or "  No extraction data."
 
-PINNED MOMENTS:
-{pinned_str}
+    # Script coverage
+    script_lines = []
+    for moment_id, status in script.items():
+        script_lines.append(f"  {moment_id}: {status}")
+    script_block = "\n".join(script_lines) or "  No script tracking data."
 
-FULL TRANSCRIPT:
-{request.transcript[-4000:] if request.transcript else "No transcript."}
+    # Qualitative notes
+    qual_block = f"""  Profile summary: {qual.get('profile_summary', 'Not filled')}
+  Motivation (student's words): {qual.get('motivation', 'Not filled')}
+  Constraints: {qual.get('constraints', 'Not filled')}
+  Emotional notes: {qual.get('emotional_notes', 'Not filled')}"""
 
-Write the report with these sections (use markdown headers):
-## Call Summary
-2-3 sentence overview of what was discussed and what was decided.
+    # KB answers / nudges shown
+    nudges_str = ""
+    nudges_fired = list(request.nudges_fired)
+    if nudges_fired:
+        nudges_str = "\n".join(
+            f"  [{n.get('type','')}] {n.get('text','')} → Suggestion: {str(n.get('suggestion',''))[0:120]}"  # type: ignore[misc]
+            for n in nudges_fired[0:10]  # type: ignore[misc]
+        )
+    else:
+        nudges_str = "  None recorded."
 
-## Student Profile Captured
-Bullet list of profile data points confirmed in this call.
+    report_prompt = f"""Write a comprehensive post-call report for the following Leap Scholar counselling session.
 
-## Action Items
-Bullet list of next steps. Format: **[Owner]** — action — by [date if mentioned].
+━━━ SESSION METADATA ━━━
+Student: {profile.get('name', 'Unknown')}
+Call Number: {request.call_number}
+Duration: {request.duration or 'Unknown'}
+Date: Today
 
-## Counsellor Commitments
-Things the counsellor promised the student during this call.
+━━━ PRIOR STUDENT PROFILE (from Notion, before this call) ━━━
+{profile_block}
 
-## Follow-Up Questions
-Open questions that still need answers before the next call.
+━━━ FIELDS CAPTURED DURING THIS CALL ━━━
+{fields_block}
 
-Keep the report concise and scannable. Use plain language."""
+━━━ AI-EXTRACTED FIELDS (post-call) ━━━
+{extracted_block}
+
+━━━ COUNSELLOR'S QUALITATIVE NOTES ━━━
+{qual_block}
+
+━━━ SCRIPT COVERAGE ━━━
+{script_block}
+
+━━━ KB ANSWERS & NUDGES SURFACED DURING CALL ━━━
+{nudges_str}
+
+━━━ FULL CALL TRANSCRIPT ━━━
+{request.transcript or 'No transcript available.'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Now write the complete post-call report using these sections exactly:
+
+## 1. Call Overview
+One paragraph: what was the purpose of this call, what stage is the student at, and what was the overall outcome. Note call number and duration.
+
+## 2. Student Profile — What We Know
+A full profile summary combining prior Notion data + what was confirmed/updated in this call. Use a table or bullet list with: Country preference, Intake, Budget, Course, Degree, CGPA/UG score, IELTS/PTE, Work experience, Backlogs, Colleges in mind, Funding plan, Family situation. Mark each as: ✅ Confirmed | 🟡 Mentioned/uncertain | ❌ Not discussed.
+
+## 3. Conversation Summary
+A detailed narrative of what happened in the call, in chronological order. Cover:
+- How the call opened (rapport / ice-breaker)
+- Key topics discussed, in order
+- Any digressions or student-led topics
+- How the call closed
+Quote the student directly (in *italics*) at key moments.
+
+## 4. Student's Questions & Concerns
+List every question or concern the student raised, with the answer given (or "Not answered" if skipped). Group by topic.
+
+## 5. Key Information Shared with Student
+What facts, KB answers, or guidance did the counsellor share? E.g. visa rules, scholarship info, cost breakdowns, university recommendations. Be specific.
+
+## 6. Student Signals & Emotional Read
+- Motivation level (1–5): What signals suggest how driven the student is?
+- Decision stage: Is the student exploring, comparing, or ready to commit?
+- Key hesitations or blockers mentioned
+- Family dynamics if discussed
+- Emotional tone (anxious, excited, uncertain, pressured, etc.)
+- Anything the counsellor should handle sensitively next call
+
+## 7. Shortlist Readiness
+Which fields are complete enough to start shortlisting universities? What is still missing? What must be resolved before the next call to move forward.
+
+## 8. Open Items & Unanswered Questions
+Questions raised but not answered. Topics that need research before next call.
+
+## 9. Commitments Made
+**Counsellor committed to:**
+- (list each)
+
+**Student committed to:**
+- (list each)
+
+## 10. Action Items
+| Owner | Action | Timeline |
+|---|---|---|
+| Counsellor | … | … |
+| Student | … | … |
+
+## 11. Recommended Next Call Agenda
+Top 4–5 things to cover in the next session, in priority order. Include suggested opening question for Call {request.call_number + 1}.
+
+## 12. Lead Status & Counsellor Assessment
+- Recommended lead status after this call
+- Student's likelihood of converting (High / Medium / Low) with brief reasoning
+- One-line counsellor note for the manager"""
 
     def generate():
         try:
             stream = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
-                max_tokens=600,
+                max_tokens=2000,
                 temperature=0.3,
                 stream=True,
                 messages=[

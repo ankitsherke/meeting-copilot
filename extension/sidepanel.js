@@ -1444,6 +1444,18 @@ generateReportBtn.addEventListener('click', async () => {
 
   const fullTranscript = transcriptBuffer.map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`).join('\n');
   const duration = postDuration.textContent;
+  const callNumber = (activeStudent?.call_count || 0) + 1;
+
+  // Collect qualitative notes from the form fields
+  const qualitative = {
+    profile_summary: qProfileSummary.value.trim(),
+    motivation:      qMotivation.value.trim(),
+    constraints:     qConstraints.value.trim(),
+    emotional_notes: qEmotionalNotes.value.trim(),
+  };
+
+  // Nudges that were shown during the call (from history + currently active)
+  const nudgesFired = [...nudgeHistory, ...activeNudges];
 
   try {
     const response = await fetch(`${BACKEND_URL}/report`, {
@@ -1451,12 +1463,15 @@ generateReportBtn.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         transcript: fullTranscript,
-        checklist_state: '',
-        pinned_nudges: [],
-        theme_id: 'counselling',
-        theme_goal: getCounsellingTheme().goal.statement,
         duration,
-        goal_achieved: false,
+        call_number: callNumber,
+        student_profile: activeStudent || {},
+        fields_captured: fieldState,
+        extracted_fields: extractionData || {},
+        script_state: scriptState,
+        qualitative,
+        nudges_fired: nudgesFired,
+        theme_goal: getCounsellingTheme().goal?.statement || '',
       }),
     });
 
@@ -1476,7 +1491,7 @@ generateReportBtn.addEventListener('click', async () => {
         if (!line.startsWith('data: ')) continue;
         try {
           const parsed = JSON.parse(line.slice(6));
-          if (parsed.text) { fullText += parsed.text; reportContent.textContent = fullText; }
+          if (parsed.text) { fullText += parsed.text; reportContent.innerHTML = markdownToHtml(fullText); }
         } catch { /* ignore */ }
       }
     }
@@ -1574,6 +1589,33 @@ newCallBtn.addEventListener('click', () => {
 });
 
 // ── Utility ────────────────────────────────────────────────────────────────────
+function markdownToHtml(md) {
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // Tables
+    .replace(/^\|(.+)\|$/gm, (_, row) =>
+      '<tr>' + row.split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>')
+    .replace(/(<tr>.*<\/tr>\n?)+/g, m => `<table>${m}</table>`)
+    .replace(/<tr><td>[-:| ]+<\/td><\/tr>/g, '') // remove separator rows
+    // Headers
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold / italic
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Bullets
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    // Horizontal rules
+    .replace(/^---+$/gm, '<hr>')
+    // Paragraphs (double newline)
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[a-z])(.+)$/gm, (m) => m.startsWith('<') ? m : m)
+    .replace(/\n/g, '<br>');
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
