@@ -36,8 +36,11 @@ let nudgeSpeechDebounceTimer = null;
 let wordsSinceLastNudge = 0;
 let lastNudgeCallTime = 0;
 let nudgeCallElapsed = 0;
-let activeNudge = null;
-let queuedNudges = [];
+let activeNudges  = [];   // max 2 shown at once
+let nudgeHistory  = [];   // last 5 dismissed
+let nudgeHistoryOpen = false;
+const MAX_ACTIVE_NUDGES = 2;
+const MAX_HISTORY       = 5;
 
 // Script tracking
 let scriptState = {};  // momentId → 'covered' | 'in_progress'
@@ -117,15 +120,8 @@ const nextMoveFieldReminder = document.getElementById('nextMoveFieldReminder');
 const nextMoveDoneBtn       = document.getElementById('nextMoveDoneBtn');
 const nextMoveBackBtn       = document.getElementById('nextMoveBackBtn');
 
-// In-call — Assist card (reactive nudges)
-const assistCardWrap      = document.getElementById('assistCardWrap');
-const assistCard          = document.getElementById('assistCard');
-const assistTypeBadge     = document.getElementById('assistTypeBadge');
-const assistExplanation   = document.getElementById('assistExplanation');
-const assistSuggestion    = document.getElementById('assistSuggestion');
-const assistPeekRow       = document.getElementById('assistPeekRow');
-const assistCopyBtn       = document.getElementById('assistCopyBtn');
-const assistDismissBtn    = document.getElementById('assistDismissBtn');
+// In-call — Nudge stack (reactive nudges)
+const nudgeStack = document.getElementById('nudgeStack');
 const fieldPills          = document.getElementById('fieldPills');
 const scriptSections      = document.getElementById('scriptSections');
 const transcript          = document.getElementById('transcript');
@@ -573,26 +569,116 @@ const TYPE_LABELS = {
   field_gap:             'Field gap',
 };
 
-function showAssistCard(nudge) {
-  activeNudge = nudge;
-  assistCard.classList.remove('hidden');
+// ── Nudge stack rendering ──────────────────────────────────────────────────────
 
-  assistCard.className = `assist-card type-${nudge.type}`;
-  assistTypeBadge.textContent = TYPE_LABELS[nudge.type] || nudge.type;
-  assistExplanation.textContent = nudge.text || '';
-  assistSuggestion.textContent  = nudge.suggestion || '';
-
-  // Peek row: show queued items
-  assistPeekRow.innerHTML = queuedNudges.slice(0, 3).map(n =>
-    `<span class="peek-badge">${TYPE_LABELS[n.type] || n.type}</span>`
-  ).join('');
+function addNudge(nudge) {
+  if (!nudge) return;
+  // If at capacity, displace oldest to history
+  if (activeNudges.length >= MAX_ACTIVE_NUDGES) {
+    nudgeHistory.unshift(activeNudges.shift());
+    if (nudgeHistory.length > MAX_HISTORY) nudgeHistory.pop();
+  }
+  activeNudges.push(nudge);
+  renderNudgeStack();
 }
 
-function hideAssistCard() {
-  activeNudge = null;
-  assistCard.classList.add('hidden');
-  assistPeekRow.innerHTML = '';
+function dismissNudgeAt(idx) {
+  const nudge = activeNudges[idx];
+  if (!nudge) return;
+  nudgeQueue.dismiss(nudge.type);
+  nudgeHistory.unshift(nudge);
+  if (nudgeHistory.length > MAX_HISTORY) nudgeHistory.pop();
+  activeNudges.splice(idx, 1);
+  // Pull next from queue if available
+  const next = nudgeQueue.flush();
+  if (next) activeNudges.push(next);
+  renderNudgeStack();
 }
+
+function clearNudges() {
+  activeNudges = [];
+  renderNudgeStack();
+}
+
+function renderNudgeStack() {
+  if (!nudgeStack) return;
+  let html = '';
+
+  // Active cards (newest last = shown bottom, render in order)
+  activeNudges.forEach((nudge, idx) => {
+    const label = TYPE_LABELS[nudge.type] || nudge.type;
+    html += `
+      <div class="nudge-card type-${nudge.type}" data-idx="${idx}">
+        <div class="nudge-card-top">
+          <span class="nudge-type-badge">${label}</span>
+          <div class="nudge-card-actions">
+            <button class="btn-nudge-copy" data-idx="${idx}" title="Copy">⎘</button>
+            <button class="btn-nudge-dismiss" data-idx="${idx}" title="Dismiss">✕</button>
+          </div>
+        </div>
+        <div class="nudge-explanation">${escapeHtml(nudge.text || '')}</div>
+        <div class="nudge-suggestion-wrap">
+          <div class="nudge-suggestion">${escapeHtml(nudge.suggestion || '')}</div>
+        </div>
+      </div>`;
+  });
+
+  // History section
+  if (nudgeHistory.length > 0) {
+    const arrowCls = nudgeHistoryOpen ? 'open' : '';
+    html += `
+      <div class="nudge-history-toggle" id="nudgeHistoryToggle">
+        <span class="nudge-history-toggle-arrow ${arrowCls}">▶</span>
+        Previous (${nudgeHistory.length})
+      </div>`;
+    if (nudgeHistoryOpen) {
+      html += `<div class="nudge-history-list">`;
+      nudgeHistory.slice(0, MAX_HISTORY).forEach(n => {
+        const label = TYPE_LABELS[n.type] || n.type;
+        const preview = (n.suggestion || n.text || '').slice(0, 80);
+        html += `
+          <div class="nudge-history-item">
+            <span class="nudge-history-badge">${label}</span>
+            <span class="nudge-history-text">${escapeHtml(preview)}${preview.length === 80 ? '…' : ''}</span>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
+  nudgeStack.innerHTML = html;
+
+  // Wire up copy buttons
+  nudgeStack.querySelectorAll('.btn-nudge-copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.dataset.idx);
+      const text = activeNudges[i]?.suggestion;
+      if (text) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        btn.textContent = '✓';
+        setTimeout(() => { btn.textContent = '⎘'; }, 1500);
+      }
+    });
+  });
+
+  // Wire up dismiss buttons
+  nudgeStack.querySelectorAll('.btn-nudge-dismiss').forEach(btn => {
+    btn.addEventListener('click', () => dismissNudgeAt(parseInt(btn.dataset.idx)));
+  });
+
+  // Wire up history toggle
+  const historyToggle = document.getElementById('nudgeHistoryToggle');
+  if (historyToggle) {
+    historyToggle.addEventListener('click', () => {
+      nudgeHistoryOpen = !nudgeHistoryOpen;
+      renderNudgeStack();
+    });
+  }
+}
+
+// Legacy aliases (used in a few places below)
+function showAssistCard(nudge) { addNudge(nudge); }
+function hideAssistCard() { clearNudges(); }
 
 // ── Next Move card ─────────────────────────────────────────────────────────────
 
@@ -779,28 +865,7 @@ document.getElementById('studentNotesToggle')?.addEventListener('click', () => {
   btn.textContent = isHidden ? '▶' : '▼';
 });
 
-assistCopyBtn.addEventListener('click', () => {
-  if (activeNudge?.suggestion) {
-    navigator.clipboard.writeText(activeNudge.suggestion).catch(() => {});
-    assistCopyBtn.textContent = '✓';
-    setTimeout(() => { assistCopyBtn.textContent = '⎘'; }, 1500);
-  }
-});
-
-assistDismissBtn.addEventListener('click', () => {
-  if (activeNudge) {
-    nudgeQueue.dismiss(activeNudge.type);
-    queuedNudges = queuedNudges.filter(n => n !== activeNudge);
-    activeNudge = null;
-  }
-  // Show next queued nudge
-  const next = nudgeQueue.flush();
-  if (next) {
-    showAssistCard(next);
-  } else {
-    hideAssistCard();
-  }
-});
+// Copy/dismiss are handled via event delegation inside renderNudgeStack()
 
 // ── Start / stop recording ─────────────────────────────────────────────────────
 startBtn.addEventListener('click', async () => {
@@ -821,8 +886,9 @@ async function startRecording() {
 
   // Reset nudge/script/field state
   nudgeQueue.reset();
-  queuedNudges = [];
-  activeNudge = null;
+  activeNudges = [];
+  nudgeHistory = [];
+  nudgeHistoryOpen = false;
   wordsSinceLastNudge = 0;
   lastNudgeCallTime = 0;
   lastQueryTime = 0;
@@ -844,7 +910,7 @@ async function startRecording() {
   statusDot.classList.add('recording');
   stopBtn.classList.remove('hidden');
   timer.classList.remove('hidden');
-  headerTitle.textContent = activeStudent ? activeStudent.name : 'Counsellor Assistant';
+  headerTitle.textContent = activeStudent ? activeStudent.name : 'OTIS';
 
   // Timer
   timerInterval = setInterval(() => {
@@ -1236,27 +1302,17 @@ async function callNudgeBackend() {
       data.nudges.forEach(n => {
         if (nudgeQueue.isTypeEnabled(n.type)) {
           nudgeQueue.add(n);
-          queuedNudges.push(n);
         }
       });
 
       // Show if no active card
-      if (!activeNudge) {
+      // Fill available slots (up to MAX_ACTIVE_NUDGES)
+      while (activeNudges.length < MAX_ACTIVE_NUDGES) {
         const next = nudgeQueue.flush();
-        if (next) showAssistCard(next);
-      } else {
-        // Interrupt if higher priority P1 nudge
-        const highPriority = data.nudges.find(n => ['profile_clarification', 'intent_divergence'].includes(n.type));
-        if (highPriority && activeNudge.priority < 5) {
-          nudgeQueue.add(highPriority);
-          const next = nudgeQueue.flush();
-          if (next) showAssistCard(next);
-        }
-        // Update peek row
-        assistPeekRow.innerHTML = queuedNudges.slice(0, 3).map(n =>
-          `<span class="peek-badge">${TYPE_LABELS[n.type] || n.type}</span>`
-        ).join('');
+        if (!next) break;
+        activeNudges.push(next);
       }
+      renderNudgeStack();
     }
   } catch (e) {
     console.warn('/nudge failed:', e.message);
@@ -1504,11 +1560,12 @@ saveNotionBtn.addEventListener('click', async () => {
 
 // ── New call ───────────────────────────────────────────────────────────────────
 newCallBtn.addEventListener('click', () => {
-  activeNudge = null;
-  queuedNudges = [];
+  activeNudges = [];
+  nudgeHistory = [];
+  nudgeHistoryOpen = false;
   transcriptBuffer = [];
   extractionData = null;
-  headerTitle.textContent = 'Counsellor Assistant';
+  headerTitle.textContent = 'OTIS';
   resetFieldState();
   initScriptState();
   setAppState('pre-call');

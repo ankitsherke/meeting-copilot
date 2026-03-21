@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Counsellor Assistant</title>
+  <title>OTIS — Counsellor Copilot</title>
   <link rel="stylesheet" href="sidepanel.css" />
 </head>
 <body>
@@ -11,8 +11,8 @@
   <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
   <header class="header">
     <div class="header-left">
-      <span class="logo-square">L</span>
-      <span class="app-name" id="headerTitle">Counsellor Assistant</span>
+      <span class="logo-square">O</span>
+      <span class="app-name" id="headerTitle">OTIS</span>
     </div>
     <div class="header-right">
       <span class="status-dot" id="statusDot"></span>
@@ -143,23 +143,8 @@
       <div class="next-move-field-reminder hidden" id="nextMoveFieldReminder"></div>
     </div>
 
-    <!-- Assist card — reactive nudges (signal detected) -->
-    <div class="assist-card-wrap" id="assistCardWrap">
-      <div class="assist-card hidden" id="assistCard">
-        <div class="assist-card-top">
-          <span class="assist-type-badge" id="assistTypeBadge"></span>
-          <div class="assist-card-actions">
-            <button class="btn-assist-copy" id="assistCopyBtn" title="Copy suggestion">⎘</button>
-            <button class="btn-assist-dismiss" id="assistDismissBtn" title="Dismiss">✕</button>
-          </div>
-        </div>
-        <div class="assist-explanation" id="assistExplanation"></div>
-        <div class="assist-suggestion-wrap">
-          <div class="assist-suggestion" id="assistSuggestion"></div>
-        </div>
-        <div class="assist-peek-row" id="assistPeekRow"></div>
-      </div>
-    </div>
+    <!-- Nudge stack — up to 2 active nudges + history -->
+    <div id="nudgeStack" class="nudge-stack"></div>
 
     <!-- Field tracker -->
     <div class="field-tracker" id="fieldTracker">
