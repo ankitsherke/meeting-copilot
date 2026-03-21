@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Counsellor Assistant",
-  "version": "2.0.0",
-  "description": "Real-time AI assistant for Leap Scholar counsellors — Notion-connected student profiles, live field extraction, script guidance.",
+  "name": "OTIS — Counsellor Copilot",
+  "version": "2.1.0",
+  "description": "OTIS — Real-time AI copilot for Leap Scholar counsellors. Live transcription, script guidance, KB answers, and Notion sync.",
+  "icons": {
+    "16":  "icons/otis-16.png",
+    "32":  "icons/otis-32.png",
+    "48":  "icons/otis-48.png",
+    "128": "icons/otis-128.png"
+  },
 
   "permissions": [
     "tabCapture",
@@ -34,6 +40,12 @@
   },
 
   "action": {
-    "default_title": "Counsellor Assistant"
+    "default_title": "OTIS — Counsellor Copilot",
+    "default_icon": {
+      "16":  "icons/otis-16.png",
+      "32":  "icons/otis-32.png",
+      "48":  "icons/otis-48.png",
+      "128": "icons/otis-128.png"
+    }
   }
 }
