@@ -598,7 +598,7 @@ async def nudge(request: NudgeRequest):
 
     user_payload = {
         "transcript_recent": transcript_recent_str,
-        "transcript_full": transcript_full[-4000:],
+        "transcript_full": transcript_full[-2000:],
         "student_context": request.student_context or {},
         "script_state": request.script_state or {},
         "fields_captured": request.fields_captured or {},
@@ -614,6 +614,7 @@ async def nudge(request: NudgeRequest):
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.4,
+        max_tokens=350,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": NUDGE_SYSTEM_PROMPT},

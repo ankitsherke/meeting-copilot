@@ -57,6 +57,9 @@ let fieldState = {};  // fieldName → { value, status: 'empty'|'detected'|'conf
 // Post-call extraction data
 let extractionData = null;
 
+// Brief data (persisted across pre→in-call transition)
+let lastBriefData = null;
+
 // Notion credentials
 let notionApiKey = '';
 let notionDbId   = '';
@@ -393,6 +396,7 @@ generateBriefBtn.addEventListener('click', async () => {
       }),
     }).then(r => r.json());
 
+    lastBriefData = data;
     renderBriefCard(data);
   } catch (e) {
     briefingContent.innerHTML = `<span style="color:var(--c-profile)">Error: ${e.message}</span>`;
@@ -491,8 +495,10 @@ function applyScriptStateUpdate(update) {
   if (!update || typeof update !== 'object') return;
   let changed = false;
   for (const [id, status] of Object.entries(update)) {
-    if (scriptState[id] !== 'covered') {
-      scriptState[id] = status;
+    if (scriptState[id] === 'covered') continue; // never un-cover
+    // Backend can only set in_progress — covered must come from Done button
+    if (status === 'in_progress' && scriptState[id] !== 'in_progress') {
+      scriptState[id] = 'in_progress';
       changed = true;
     }
   }
@@ -540,24 +546,21 @@ function confirmFieldPill(pill) {
 function renderScriptTracker() {
   if (!scriptSections) return;
   const theme = getCounsellingTheme();
-  const sections = {};
-  theme.scriptMoments.forEach(m => {
-    if (!sections[m.section]) sections[m.section] = [];
-    sections[m.section].push(m);
-  });
+  const moments = theme.scriptMoments;
+  const total   = moments.length;
+  const covered = moments.filter(m => scriptState[m.id] === 'covered').length;
+  const active  = moments.find(m => !scriptState[m.id] || scriptState[m.id] === 'pending' || scriptState[m.id] === 'in_progress');
+  const pct     = total ? Math.round((covered / total) * 100) : 0;
 
-  scriptSections.innerHTML = Object.entries(sections).map(([sectionName, moments]) => `
-    <div class="script-section-row">
-      <span class="script-section-name">${sectionName}</span>
-      <div class="script-dots">
-        ${moments.map(m => {
-          const state = scriptState[m.id] || 'pending';
-          const cls = state === 'covered' ? 'covered' : (state === 'in_progress' ? 'in-progress' : '');
-          return `<div class="script-dot ${cls}" title="${m.label}"></div>`;
-        }).join('')}
+  scriptSections.innerHTML = `
+    <div class="script-bar-wrap">
+      <div class="script-bar-track">
+        <div class="script-bar-fill" style="width:${pct}%"></div>
       </div>
+      <span class="script-bar-label">${covered}/${total}</span>
     </div>
-  `).join('');
+    ${active ? `<div class="script-bar-active">Now: <strong>${active.section}</strong> — ${active.label}</div>` : '<div class="script-bar-active">All moments covered</div>'}
+  `;
 }
 
 // ── Assist card ────────────────────────────────────────────────────────────────
@@ -642,6 +645,24 @@ function renderNextMove() {
   nextMoveScriptLabel.textContent = nextMoment.label;
   nextMoveQuestion.textContent = nextMoment.suggestedQuestion;
 
+  // Show upcoming question (next after current)
+  const theme2 = getCounsellingTheme();
+  const moments2 = theme2.scriptMoments;
+  const currentIdx = moments2.findIndex(m => m.id === nextMoment.id);
+  const upcomingMoment = moments2.slice(currentIdx + 1).find(m => {
+    const s = scriptState[m.id];
+    return !s || s === 'pending';
+  });
+  const upcomingEl = document.getElementById('nextMoveUpcoming');
+  if (upcomingEl) {
+    if (upcomingMoment) {
+      upcomingEl.textContent = `Up next: ${upcomingMoment.label}`;
+      upcomingEl.classList.remove('hidden');
+    } else {
+      upcomingEl.classList.add('hidden');
+    }
+  }
+
   // Field reminder: show missing required fields if we're in Profiling or later
   const sectionOrder = ['Rapport', 'Profiling', 'Reaffirmation', 'Close'];
   const currentSectionIdx = sectionOrder.indexOf(nextMoment.section);
@@ -681,6 +702,81 @@ nextMoveBackBtn.addEventListener('click', () => {
     renderScriptTracker();
     renderNextMove();
   }
+});
+
+// ── Student Notes (in-call collapsible) ────────────────────────────────────────
+function renderStudentNotes() {
+  const panel = document.getElementById('studentNotesPanel');
+  const body  = document.getElementById('studentNotesBody');
+  if (!panel || !body) return;
+
+  const items = [];
+
+  // Carry-forwards from brief (high urgency first)
+  if (lastBriefData?.carry_forwards?.length) {
+    const highs = lastBriefData.carry_forwards.filter(c => c.urgency === 'high');
+    const rest  = lastBriefData.carry_forwards.filter(c => c.urgency !== 'high');
+    [...highs, ...rest].forEach(c => {
+      const text = typeof c === 'string' ? c : c.text;
+      items.push({ type: 'blocker', label: text });
+    });
+  }
+
+  // Open questions from Notion profile
+  const oq = activeStudent?.open_questions;
+  if (oq) {
+    String(oq).split(/\n|;/).map(s => s.trim()).filter(Boolean).forEach(q => {
+      items.push({ type: 'question', label: q });
+    });
+  }
+
+  // Counsellor commitments
+  const cc = activeStudent?.counsellor_commitments;
+  if (cc) {
+    String(cc).split(/\n|;/).map(s => s.trim()).filter(Boolean).forEach(c => {
+      items.push({ type: 'commitment', label: c });
+    });
+  }
+
+  // Constraints
+  const cons = activeStudent?.constraints || lastBriefData?.constraints;
+  if (cons) {
+    String(cons).split(/\n|;/).map(s => s.trim()).filter(Boolean).forEach(c => {
+      items.push({ type: 'constraint', label: c });
+    });
+  }
+
+  // Emotional notes
+  const em = activeStudent?.emotional_notes;
+  if (em) {
+    String(em).split(/\n|;/).map(s => s.trim()).filter(Boolean).forEach(e => {
+      items.push({ type: 'emotional', label: e });
+    });
+  }
+
+  if (!items.length) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  const ICONS = { blocker: '⚠', question: '?', commitment: '✓', constraint: '⛔', emotional: '💬' };
+  body.innerHTML = items.map(item =>
+    `<div class="sn-item sn-${item.type}">
+      <span class="sn-icon">${ICONS[item.type] || '•'}</span>
+      <span class="sn-text">${escapeHtml(item.label)}</span>
+    </div>`
+  ).join('');
+
+  panel.classList.remove('hidden');
+}
+
+// Toggle collapse
+document.getElementById('studentNotesToggle')?.addEventListener('click', () => {
+  const body = document.getElementById('studentNotesBody');
+  const btn  = document.getElementById('studentNotesToggle');
+  if (!body) return;
+  const isHidden = body.classList.toggle('hidden');
+  btn.textContent = isHidden ? '▶' : '▼';
 });
 
 assistCopyBtn.addEventListener('click', () => {
@@ -742,6 +838,7 @@ async function startRecording() {
   renderScriptTracker();
   renderFieldPills();
   renderNextMove();
+  renderStudentNotes();
   clearTranscript();
 
   statusDot.classList.add('recording');
@@ -1056,14 +1153,15 @@ async function runQuery(question) {
           const parsed = JSON.parse(line.slice(6));
           if (parsed.text) fullText += parsed.text;
           if (parsed.done && fullText.trim()) {
-            nudgeQueue.add({
+            // KB answers always show immediately — bypass queue cooldown
+            // They are direct responses to student questions and must not be dropped
+            showAssistCard({
               type: 'kb_answer',
               text: `Student asked: "${question}"`,
               suggestion: fullText.trim(),
               source: parsed.sources?.join(', ') || 'KB',
+              priority: 3,
             });
-            const next = nudgeQueue.flush();
-            if (next) showAssistCard(next);
           }
         } catch { /* ignore parse errors */ }
       }
@@ -1078,18 +1176,22 @@ async function callNudgeBackend() {
   if (!isRecording) return;
   if (transcriptBuffer.length === 0) return;
 
+  // Skip /nudge if /query fired recently — /query already handles the KB question
+  // and /nudge calling GPT on the same content just adds 10s of redundant latency
+  if (Date.now() - lastQueryTime < 15000) return;
+
   lastNudgeCallTime = Date.now();
   wordsSinceLastNudge = 0;
 
-  // transcript_recent: last 6 chunks as structured objects
-  const recentChunks = transcriptBuffer.slice(-6).map(b => ({
+  // transcript_recent: last 5 chunks as structured objects
+  const recentChunks = transcriptBuffer.slice(-5).map(b => ({
     speaker: b.speaker === 'you' ? 'counsellor' : 'student',
     text: b.text,
     timestamp: b.timestamp,
   }));
 
-  // transcript_full: last 80 turns as readable text
-  const transcriptFull = transcriptBuffer.slice(-80)
+  // transcript_full: last 30 turns (was 80 — reduces GPT token count → faster)
+  const transcriptFull = transcriptBuffer.slice(-30)
     .map(b => `${b.speaker === 'you' ? 'Counsellor' : 'Student'}: ${b.text}`)
     .join('\n');
 

@@ -515,6 +515,14 @@ button { cursor: pointer; border: none; background: none; }
   border-left: 2px solid var(--brand);
 }
 
+.next-move-upcoming {
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-style: italic;
+  padding-left: 2px;
+}
+
 .next-move-field-reminder {
   margin-top: 6px;
   font-size: 11px;
@@ -719,42 +727,107 @@ button { cursor: pointer; border: none; background: none; }
   margin-bottom: 10px;
 }
 
-.script-sections { display: flex; flex-direction: column; gap: 4px; }
+.script-sections { display: flex; flex-direction: column; gap: 5px; }
 
-.script-section-row {
+.script-bar-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
-.script-section-name {
+.script-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.script-bar-fill {
+  height: 100%;
+  background: var(--c-script);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.script-bar-label {
   font-size: 10px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-3);
-  width: 70px;
   flex-shrink: 0;
 }
 
-.script-dots { display: flex; gap: 4px; flex-wrap: wrap; }
+.script-bar-active {
+  font-size: 10px;
+  color: var(--text-3);
+}
 
-.script-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-dark);
-  background: var(--bg);
-  title: attr(title);
-  cursor: default;
+.script-bar-active strong {
+  color: var(--text-2);
+}
+
+/* Student Notes */
+.student-notes-wrap {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.student-notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.student-notes-toggle {
+  font-size: 10px;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.student-notes-body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sn-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.sn-icon {
   flex-shrink: 0;
-  transition: all 0.2s;
+  font-size: 10px;
+  margin-top: 1px;
+  width: 14px;
+  text-align: center;
 }
 
-.script-dot.covered  { background: var(--c-script); border-color: var(--c-script); }
-.script-dot.in-progress {
-  background: var(--pill-amber-bg);
-  border-color: var(--pill-amber-border);
-}
+.sn-text { color: var(--text-1); }
+
+.sn-blocker .sn-icon   { color: #e84949; }
+.sn-blocker .sn-text   { color: #e84949; font-weight: 500; }
+.sn-question .sn-icon  { color: var(--c-accent); }
+.sn-question .sn-text  { color: var(--text-2); }
+.sn-commitment .sn-icon { color: #3a9a6e; }
+.sn-commitment .sn-text { color: var(--text-2); }
+.sn-constraint .sn-icon { color: #e8944a; }
+.sn-constraint .sn-text { color: var(--text-2); }
+.sn-emotional .sn-icon  { color: #9a7dc9; }
+.sn-emotional .sn-text  { color: var(--text-3); font-style: italic; }
 
 /* Transcript */
 .transcript-wrap { margin-bottom: 8px; }
