@@ -659,6 +659,444 @@ Students with ₹40–50L education loans (common for Australia/UK) will face EM
 
 ---
 
+## Section 7: Australia — Deep Dive Reference
+
+### 7.1 Top Universities (Group of Eight + Major Institutions)
+
+| University | City | Global Ranking (QS 2025) | Tuition INR/year (Masters) | Strengths |
+|---|---|---|---|---|
+| University of Melbourne | Melbourne | #13 | ₹25–32L | Business, Law, Engineering, Education |
+| Australian National University (ANU) | Canberra | #30 | ₹22–28L | Research, Policy, Science, IT |
+| University of Sydney | Sydney | #18 | ₹26–34L | Business, Medicine, Engineering, Data Science |
+| University of New South Wales (UNSW) | Sydney | #19 | ₹25–33L | Engineering, Computer Science, Finance |
+| University of Queensland (UQ) | Brisbane | #40 | ₹22–30L | Biotech, Engineering, Business |
+| Monash University | Melbourne | #42 | ₹21–28L | Pharmacy, IT, Engineering, Business |
+| University of Western Australia (UWA) | Perth | #67 | ₹20–27L | Mining, Engineering, Environment |
+| University of Adelaide | Adelaide | #89 | ₹19–26L | Engineering, Wine Business, Agriculture |
+| RMIT University | Melbourne | #126 | ₹18–25L | Design, Engineering, Business IT |
+| Deakin University | Melbourne/Geelong | #258 | ₹16–22L | IT, Business, Health Sciences |
+| La Trobe University | Melbourne | #393 | ₹15–20L | Health, IT, Education |
+| Federation University | Ballarat (Regional) | N/A | ₹12–16L | Business, IT, Engineering — regional campus, easy 485 |
+| Central Queensland University (CQU) | Multiple cities | N/A | ₹12–15L | Business, IT, Engineering — low entry requirements |
+| University of Southern Queensland (USQ) | Toowoomba (Regional) | N/A | ₹12–15L | Engineering, IT, Business — strong regional bonus |
+
+**Group of Eight (Go8):** Melbourne, Sydney, UNSW, UQ, Monash, ANU, UWA, Adelaide — equivalent to UK Russell Group in prestige and employer recognition.
+
+**Regional campus advantage:** Universities like Federation, CQU, USQ, and Charles Darwin offer lower tuition AND regional study location, which qualifies the student for extended 485 Post-Study Work Visa (3–5 years vs. 2 years metro).
+
+---
+
+### 7.2 Popular Courses for Indian Students — Australia
+
+| Course | Duration | Typical CGPA Requirement | IELTS Requirement | Tuition INR/year |
+|---|---|---|---|---|
+| Master of Data Science | 2 years | 6.5/10 | 6.5 overall | ₹22–30L |
+| Master of Computer Science | 2 years | 7.0/10 | 6.5 overall | ₹22–32L |
+| Master of Information Technology | 2 years | 6.5/10 | 6.5 overall | ₹18–28L |
+| Master of Business Administration (MBA) | 1.5–2 years | 7.0/10 + work exp | 6.5 overall | ₹25–35L |
+| Master of Business Analytics | 2 years | 7.0/10 | 6.5 overall | ₹22–30L |
+| Master of Engineering (Civil/Mechanical/Electrical) | 2 years | 7.5/10 | 6.5 overall | ₹22–30L |
+| Master of Accounting / CPA pathway | 2 years | 6.5/10 | 6.5 overall | ₹20–28L |
+| Master of Finance | 2 years | 7.0/10 | 6.5 overall | ₹22–30L |
+| Master of Design | 2 years | Portfolio | 6.5 overall | ₹18–26L |
+| Master of Architecture | 2 years | Portfolio + CGPA 7.0 | 6.5 overall | ₹20–28L |
+| Master of Public Health | 2 years | 7.0/10 | 7.0 overall | ₹20–27L |
+| Certificate IV + Diploma (Vocational/Cookery) | 2 years (packaged) | No minimum | 5.5 overall | ₹8–12L |
+
+**Key point for 485 eligibility:** All courses above (if taken full-time at an Australian campus) must be at least 92 weeks. Always verify the specific program's CRICOS registered duration.
+
+**AI and Machine Learning:** Available as specialisation within Data Science or CS programs at Melbourne, UNSW, Sydney, UQ, Monash. There is no separate "Masters in AI" at most Go8 universities — it's a specialisation within the broader Data Science or CS program. RMIT and Deakin offer standalone AI degrees.
+
+---
+
+### 7.3 Scholarships for Australia
+
+**Government Scholarships:**
+
+**Australia Awards (formerly Endeavour Awards):**
+- Fully funded: tuition + living allowance + airfare + health insurance
+- Highly competitive; requires strong academic record (typically CGPA 8.5+), professional experience, and demonstrated development impact
+- For Masters and PhD: 2–4 year coverage
+- Application opens around April–June for the following year's intake
+- Not suitable for average students — inform students honestly about competitiveness
+
+**Destination Australia Scholarship:**
+- AUD 15,000 (approximately ₹8.25L) per year for students studying in regional campuses
+- Does not require an application separate from the regional university application — universities allocate them
+- Stacks with regional campus lower tuition; makes regional campuses highly cost-effective
+
+**University Merit Scholarships:**
+
+| University | Scholarship | Amount | Eligibility |
+|---|---|---|---|
+| University of Melbourne | Melbourne Research Scholarship | Full tuition + AUD 30,000 stipend | PhD only |
+| University of Melbourne | Graduate Research Scholarships | Tuition waiver + stipend | PhD |
+| Monash University | Monash International Merit Scholarship | Up to AUD 10,000 (₹5.5L) per year | CGPA 8.0+, no separate application |
+| UNSW | UNSW International Scholarship | 10–30% tuition reduction | Academic merit |
+| University of Sydney | Sydney Scholars Awards | Up to AUD 7,500 (₹4.1L) | Merit-based, automatic consideration |
+| UQ | UQ Excellence Scholarships | Up to AUD 10,000 (₹5.5L) | CGPA 8.0+, separate application required |
+| Deakin University | Deakin Vice-Chancellor's Scholarship | 50% tuition reduction | CGPA 8.5+, limited seats |
+| La Trobe University | La Trobe Excellence Scholarship | 25–50% tuition | High CGPA |
+| RMIT | RMIT International Merit Scholarship | ₹1–3L | Portfolio + CGPA |
+
+**Realistic scholarship expectation for most Indian students:**
+- Merit scholarships of ₹3–6L/year are achievable for CGPA 7.5+ students at mid-tier universities
+- Full scholarships (covering all costs) are rare for taught Masters — almost exclusively available at PhD/research level
+- Regional scholarships (Destination Australia) are the most accessible and reliable for cost reduction
+
+**How to maximise scholarship chances:**
+1. Apply early — most scholarships are assessed with the admission application
+2. Contact international offices directly and ask about automatic scholarship consideration
+3. Target universities where Indian student volumes are high — they compete for Indian students and offer better scholarships
+
+---
+
+### 7.4 Part-Time Work — Australia
+
+**During studies:**
+- **Semester (term time):** 48 hours per fortnight (changed from 40 hours in July 2023). This is approximately 24 hours per week.
+- **University holidays / vacation periods:** Unlimited hours. Verify holiday dates with the university as they define this.
+- **On-campus work:** Not counted against the 48-hour limit in most cases — check individual university rules
+
+**Hourly rates:**
+- Minimum wage in Australia (2025): AUD 24.10/hour (approximately ₹1,327/hour)
+- Hospitality, retail, aged care: AUD 24–30/hour
+- IT/professional roles: AUD 30–60/hour depending on skill level
+- Casual roles on Seek, Indeed — common for international students
+
+**Monthly earning potential (semester, part-time):**
+- 48 hours/fortnight at AUD 25/hour = AUD 1,200/fortnight = approximately AUD 2,400/month = ₹1.32L/month
+- This is not guaranteed — it depends on finding work, which takes time (typically 1–3 months after arrival)
+
+**Reality check for students:** Tell students not to plan their budget assuming part-time income from day 1. Factor it in as a supplement, not a baseline. Living costs must be covered by savings or loan disbursements initially.
+
+**Tax for international students:** International students pay Australian income tax (between 15–32.5% depending on income). They are not eligible for the tax-free threshold. File a tax return annually — many students receive partial refunds.
+
+---
+
+### 7.5 PR Pathway — Australia (Detailed)
+
+**Overview:** Australia uses a points-based skilled migration system managed through SkillSelect. Most student-to-PR journeys take 3–7 years after graduation.
+
+**Step 1: Post-Study Work (485 Visa)**
+- 2 years in metropolitan areas; 3–5 years in regional areas
+- Build Australian work experience, which earns significant points
+
+**Step 2: Points Test (General Skilled Migration)**
+- 65 points minimum to submit an Expression of Interest (EOI) through SkillSelect
+- Points awarded for: age, English proficiency, Australian work experience, Australian qualifications, overseas work experience, state nomination, community language, regional study, partner skills
+
+| Factor | Points |
+|---|---|
+| Age 25–32 | 30 points |
+| Superior English (IELTS 8.0 each band) | 20 points |
+| Competent English (IELTS 6.0 each band) | 0 bonus |
+| Australian Masters degree | 15 points (from 2023) |
+| Australian Bachelor's | 15 points |
+| Australian work experience (5+ years) | 20 points |
+| State/Territory Nomination (190) | 5 points |
+| Regional study (491) | 15 points |
+
+**Visa pathways:**
+- **Subclass 189 (Skilled Independent):** No state nomination required; fully points-based; cutoff scores typically 85–100+ for popular occupations
+- **Subclass 190 (Skilled Nominated):** Requires state nomination; adds 5 points; cutoff typically 65–85
+- **Subclass 491 (Skilled Work Regional):** Temporary regional visa; adds 15 points; leads to 191 (permanent) after 3 years
+
+**ANZSCO occupation lists:** Your occupation must be on the Medium and Long-term Strategic Skills List (MLTSSL) or Short-term Skilled Occupation List (STSOL). Common occupations for Indian graduates:
+- Software Engineer (261313) — MLTSSL, strong demand
+- ICT Business Analyst (261111) — MLTSSL
+- Data Scientist (262113) — MLTSSL
+- Systems Analyst (261112) — MLTSSL
+- Mechanical Engineer (233512) — MLTSSL
+- Civil Engineer (233211) — MLTSSL
+- Accountant (221111) — MLTSSL
+- Management Consultant (224711) — MLTSSL
+
+**State nomination (190/491) strategy:**
+- States nominate based on occupation demand and individual state needs
+- WA and SA have historically been more accessible; Victoria and NSW have higher cutoffs
+- Regional nomination (491 + 491.10 skills assessment) gives 15 bonus points — most reliable route
+
+---
+
+### 7.6 Cost of Living by City — Australia
+
+| City | Monthly Living Cost (INR) | Notes |
+|---|---|---|
+| Sydney | ₹14–18L/year | Most expensive; housing very tight |
+| Melbourne | ₹14–17L/year | Culturally diverse; large Indian community |
+| Brisbane | ₹12–15L/year | Lower cost; growing tech and engineering sector |
+| Perth | ₹11–14L/year | Strong mining sector; newer Indian community |
+| Adelaide | ₹10–13L/year | Most affordable metro; slower job market |
+| Canberra | ₹12–15L/year | Public sector focus; good for policy and research |
+| Gold Coast | ₹10–13L/year | Tourism-heavy; limited professional jobs |
+| Regional (Ballarat, Toowoomba, Rockhampton) | ₹8–11L/year | Lowest costs; limited job market |
+
+**Accommodation options:**
+- On-campus student housing: AUD 200–350/week — convenient, limited availability; apply immediately after acceptance
+- Shared private rental: AUD 150–250/week — most common for Indians; use Facebook groups, Flatmates.com.au
+- Homestay: AUD 250–350/week — includes meals; useful for first few months
+- Private studio: AUD 300–500/week — Sydney/Melbourne; expensive but available
+
+**Tip for students:** Apply for student accommodation the same week as university acceptance. Waitlists fill fast. Have a short-term Airbnb or hostel booking as backup for the first 2–4 weeks.
+
+---
+
+### 7.7 Health Insurance (OSHC) — Australia
+
+- OSHC (Overseas Student Health Cover) is mandatory for all student visa holders for the entire duration of study
+- Must be arranged before the visa application; most universities facilitate through Medibank, Bupa, or Allianz
+- Annual cost: AUD 600–700 for single students (approximately ₹33,000–38,500)
+- Covers: GP visits, hospital treatment, ambulance, some specialist consultations
+- Does NOT cover: dental (basic dental not included unless purchased as add-on), optical, pre-existing conditions in the first year
+
+---
+
+### 7.8 Banking in Australia
+
+- Open an Australian bank account before arriving using a digital pre-arrival service
+- **Commonwealth Bank (CommBank):** Most popular with Indian students; extensive branch and ATM network; can open account online from India 3 months before arrival
+- **ANZ, Westpac, NAB:** Also popular; similar features
+- Account requires: passport, visa grant letter, university offer letter, address in Australia (can use a temporary address initially)
+- **International transfer to family:** Use Wise or Remitly from Australia to India — significantly lower fees than bank transfers
+
+---
+
+## Section 8: United Kingdom — Deep Dive Reference
+
+### 8.1 Top Universities (Russell Group + Major Institutions)
+
+| University | City | QS Ranking 2025 | Tuition INR/year (Masters) | Strengths |
+|---|---|---|---|---|
+| University of Oxford | Oxford | #3 | ₹38–48L | PPE, Law, Medicine, Research |
+| University of Cambridge | Cambridge | #5 | ₹36–48L | Sciences, Engineering, Law, Research |
+| Imperial College London | London | #8 | ₹38–50L | Engineering, Computing, Business |
+| UCL (University College London) | London | #9 | ₹32–45L | Architecture, Law, Science, Business |
+| University of Edinburgh | Edinburgh | #22 | ₹28–38L | Data Science, Business, AI |
+| King's College London (KCL) | London | #40 | ₹30–42L | Law, Business, Health |
+| University of Manchester | Manchester | #34 | ₹26–36L | Engineering, Business, CS |
+| University of Warwick | Coventry | #67 | ₹26–36L | Economics, Business, CS |
+| University of Bristol | Bristol | #55 | ₹24–34L | Engineering, Law, Medicine |
+| University of Glasgow | Glasgow | #78 | ₹22–30L | Engineering, Business, CS |
+| University of Birmingham | Birmingham | #84 | ₹22–30L | Business, Engineering |
+| University of Sheffield | Sheffield | #111 | ₹20–28L | Engineering, Architecture |
+| University of Nottingham | Nottingham | #113 | ₹20–28L | Business, Engineering, Pharmacy |
+| University of Leeds | Leeds | #125 | ₹20–28L | Business, Law, CS |
+| University of Southampton | Southampton | #81 | ₹22–30L | Engineering, CS, Health |
+| Cranfield University | Bedford | Specialist | ₹28–40L | Aerospace, Management, Defence |
+| Coventry University | Coventry | Post-92 | ₹18–24L | Business, IT, Engineering |
+| University of Hertfordshire | Hatfield | Post-92 | ₹16–22L | Aviation, Engineering, Business |
+| Northumbria University | Newcastle | Post-92 | ₹16–22L | Business, Law, Design |
+
+**Russell Group (24 universities):** Oxford, Cambridge, Imperial, UCL, Edinburgh, KCL, Manchester, Warwick, Bristol, Glasgow, Birmingham, Sheffield, Nottingham, Leeds, Southampton, Cardiff, Queen's Belfast, Exeter, Liverpool, Durham, York, Newcastle, Queen Mary London, LSE.
+
+**Post-92 universities:** Former polytechnics; offer more vocational and applied programs; lower tuition; admission requirements are generally more accessible. Very strong for students with CGPA below 7.0 or without IELTS.
+
+---
+
+### 8.2 Popular Courses for Indian Students — UK
+
+| Course | Duration | Typical CGPA | IELTS | Tuition INR/year |
+|---|---|---|---|---|
+| MSc Data Science | 1 year | 6.5–7.5/10 | 6.5 overall | ₹24–38L |
+| MSc Computer Science | 1 year | 7.0/10 | 6.5 overall | ₹25–40L |
+| MSc Artificial Intelligence | 1 year | 7.0/10 | 6.5 overall | ₹25–42L |
+| MSc Machine Learning | 1 year | 7.5/10 | 6.5 overall | ₹28–45L |
+| MBA (1-year) | 1 year | 7.0/10 + work exp | 6.5 overall | ₹30–55L |
+| MSc Finance / Investment Banking | 1 year | 7.0/10 | 6.5 overall | ₹26–42L |
+| MSc Management | 1 year | 6.5/10 | 6.5 overall | ₹24–36L |
+| MSc Engineering Management | 1 year | 7.0/10 | 6.5 overall | ₹24–34L |
+| MSc Civil / Structural Engineering | 1 year | 7.0/10 | 6.5 overall | ₹22–32L |
+| MSc Cybersecurity | 1 year | 6.5/10 | 6.5 overall | ₹22–34L |
+| MSc Cloud Computing | 1 year | 6.5/10 | 6.0 overall | ₹20–28L |
+| LLM (Master of Laws) | 1 year | Law degree | 7.0 overall | ₹28–45L |
+| MSc Public Health | 1 year | 7.0/10 | 7.0 overall | ₹22–32L |
+| MSc Architecture (RIBA Part 2) | 2 years | Portfolio | 7.0 overall | ₹25–36L/year |
+
+**1-year Masters advantage:** The standard UK Masters completes in 12 months — including taught modules (September–May) plus dissertation (May–September). This is unique to the UK system and cuts total program cost significantly compared to Australia (2 years) or Canada (2 years).
+
+---
+
+### 8.3 Scholarships for UK
+
+**Government / National Scholarships:**
+
+**Chevening Scholarship (UK Government):**
+- Fully funded: tuition + monthly stipend (approximately GBP 1,200–1,400/month) + return airfare + visa fee
+- Target: "leaders of tomorrow" — requires 2+ years full-time work experience
+- Extremely competitive: ~1,500 scholarships globally per year; India is one of the largest recipient countries
+- Application opens in August; deadline typically November; results in June
+- Requires: university offers letter, 3 references, 4 essays (career, leadership, networking, UK study motivation)
+- Not suitable for fresh graduates — must have work experience
+
+**GREAT Scholarship (British Council + Russell Group):**
+- GBP 10,000 (approximately ₹10.7L) tuition fee reduction
+- Available at 31 UK universities for Indian students
+- Eligible: students applying for an eligible 1-year Masters
+- Application via British Council India and individual universities
+- Less competitive than Chevening; worth applying if CGPA is 7.0+
+
+**Commonwealth Scholarships:**
+- Fully funded: tuition + stipend + airfare
+- For students from Commonwealth countries including India
+- Primarily for development-relevant programs (education, health, governance)
+- Administered by Commonwealth Scholarship Commission; very competitive
+
+**University Merit Scholarships:**
+
+| University | Scholarship | Amount | Eligibility |
+|---|---|---|---|
+| University of Edinburgh | Global Scholarships | GBP 5,000 (₹5.35L) | Academic merit, automatic consideration |
+| University of Manchester | AMBS Scholarship | 10–20% tuition reduction | CGPA 7.5+ |
+| UCL | UCL Global Excellence Scholarship | Full or partial tuition | Research programs; very competitive |
+| University of Warwick | Warwick Chancellor's Scholarship | Full tuition + stipend | Exceptional candidates only |
+| University of Birmingham | Global Masters Scholarship | GBP 2,000–5,000 | CGPA 7.5+ |
+| University of Sheffield | Sheffield Futures Scholarship | 25% tuition reduction | Merit-based |
+| University of Leeds | Leeds Masters Excellence Award | GBP 3,000 | CGPA 7.0+ |
+| Coventry University | Coventry Global Scholarship | 20–50% tuition | CGPA 6.5+ |
+| Nottingham | VC Excellence Scholarship | Up to 50% tuition | Exceptional academic record |
+| King's College London | KCL International Scholarships | GBP 5,000–full | Competitive; separate application |
+
+**Realistic scholarship expectations for UK:**
+- Partial scholarships (₹2–6L) are achievable for most students with CGPA 7.0+
+- Full scholarships (Chevening, Commonwealth) require exceptional profile + work experience
+- Always ask universities about automatic scholarship consideration at time of application
+- GREAT Scholarship is the most accessible substantial scholarship for average Indian students
+
+---
+
+### 8.4 Part-Time Work — UK
+
+**During studies:**
+- Term time: 20 hours per week (strictly enforced; violation can jeopardise student visa)
+- University holidays (summer, Christmas, Easter): Full-time (no hour restriction)
+
+**Hourly rates (UK, 2025):**
+- National Living Wage (25+): GBP 11.44/hour (approximately ₹1,224/hour)
+- Hospitality, retail: GBP 11.50–14/hour
+- IT / data roles: GBP 15–30/hour
+- Teaching assistant / research assistant: GBP 12–18/hour
+
+**Monthly earning potential during term:**
+- 20 hours/week × 4 weeks × GBP 12/hour = GBP 960/month = approximately ₹1.03L/month
+- Not a substitute for savings — primarily helps cover day-to-day expenses
+
+**Popular part-time work for Indian students:**
+- Campus library assistant, café worker, event staff — easy to get
+- Data entry, virtual assistant, tutoring — available online
+- IT support, helpdesk — for CS students; better pay
+- Campus research assistant — apply through university job boards
+
+**Graduate Route work:**
+- 2 years open work rights after Masters (3 years after PhD)
+- Any role, any employer, any location — no job offer required before graduation
+- Average starting salary for Masters graduates: GBP 25,000–40,000/year depending on field
+- London salaries typically 20–30% higher but cost of living offsets much of this
+
+---
+
+### 8.5 PR Pathway — UK (Detailed)
+
+**Honest assessment:** UK PR (ILR — Indefinite Leave to Remain) is employer-dependent and takes a minimum of 5 years after arriving on a work visa. It is not a reliable short-term outcome for most Indian students.
+
+**Pathway:**
+1. Graduate Route (2 years post-Masters): Look for sponsored employment
+2. Skilled Worker Visa: Employer must be a licensed sponsor; salary must meet minimum threshold
+3. Current minimum salary thresholds (2024 changes): GBP 38,700 for most occupations (increased from £26,200) — significant increase
+4. ILR: After 5 years of continuous qualifying residence on skilled worker visa
+5. British Citizenship: After 1 year post-ILR
+
+**Skilled Worker visa salary thresholds (2024–2025):**
+- General minimum: GBP 38,700/year
+- Lower-threshold "shortage occupations": GBP 30,960 (for specific listed occupations)
+- New entrant rate (for graduates in first 3 years of career): GBP 30,960
+
+**Key challenge for Indian students:** The salary threshold is now very high — GBP 38,700 (₹41.4L/year) — which many entry-level roles in the UK do not meet, particularly outside London. Students in IT, finance, and engineering are most likely to achieve this; hospitality, healthcare (below consultant level), education, and retail graduates will struggle.
+
+**Occupations with strong Skilled Worker sponsorship:**
+- Software Developer / Engineer
+- Data Scientist / Analyst
+- Financial Analyst / Investment Banker
+- Management Consultant
+- Civil / Structural / Mechanical Engineer
+- Pharmacist / Physiotherapist (healthcare)
+- Teacher (shortage occupation — lower threshold)
+
+**Realistic UK PR timeline:** Graduation (2026) → Graduate Route work (2026–2028) → Skilled Worker visa secured (2027–2028) → ILR (2032–2033). Total: 7–8 years from arrival.
+
+---
+
+### 8.6 Cost of Living by City — UK
+
+| City | Annual Living Cost (INR) | Notes |
+|---|---|---|
+| London | ₹16–20L/year | Highest cost in UK; most jobs; Russell Group concentration |
+| Edinburgh | ₹12–15L/year | Beautiful city; strong data science and tech ecosystem |
+| Manchester | ₹11–14L/year | Large Indian community; growing tech sector |
+| Birmingham | ₹11–14L/year | Diverse; second largest city; affordable |
+| Bristol | ₹12–15L/year | Growing tech hub; popular with engineering graduates |
+| Leeds | ₹10–13L/year | Finance and law hub; lower cost |
+| Sheffield | ₹10–12L/year | Most affordable major city; strong engineering |
+| Coventry | ₹9–12L/year | Post-92 universities; very affordable |
+| Nottingham | ₹10–13L/year | Two universities; lively student city |
+| Glasgow | ₹10–13L/year | Strong engineering and business; affordable |
+
+**Accommodation in the UK:**
+- University halls (on-campus): GBP 150–300/week — apply immediately upon acceptance
+- Private student accommodation (Unite, iQ, Urbanest): GBP 200–400/week — London is expensive; book 6+ months in advance
+- Shared house (HMO): GBP 100–200/week outside London; GBP 150–350/week London — most affordable long-term option
+- Homestay: GBP 150–250/week — includes meals; good for first term
+
+**London vs. outside London for Indian students:**
+- London: Higher tuition (at some universities), higher living costs — but more job opportunities, larger Indian community, stronger professional networks
+- Outside London: Lower costs, often better quality of life — but fewer employer sponsors in some sectors
+
+---
+
+### 8.7 UK Student Visa — Key Details for Indian Students
+
+**Documents required:**
+- CAS (Confirmation of Acceptance for Studies) — from university after fee deposit
+- Proof of funds (28-day rule): First year tuition + living costs held continuously for 28 days
+- Valid passport
+- English language evidence (UKVI-approved IELTS or exemption)
+- Tuberculosis (TB) test result from approved clinic in India (mandatory for Indian applicants)
+- Academic transcripts and degree certificates
+
+**TB test requirement:**
+- All Indian applicants must take a TB test at an approved clinic before applying for UK visa
+- Approved clinics in India: Apollo Hospitals, Fortis, and specific designated clinics (list on UK Home Office website)
+- Results valid for 6 months; get this early to avoid delays
+- Cost: approximately ₹3,500–6,000
+
+**Visa processing time from India:**
+- Standard processing: 3 weeks (15 working days) — most applications
+- Priority service: 5 working days — additional fee approximately GBP 500
+- Apply at UK Visa Application Centre (VFS); biometrics required in India
+
+**NHS surcharge:**
+- GBP 776/year (2024 rate, increased from GBP 624) — paid upfront for the entire visa duration at the time of application
+- For a 3-year visa (1-year Masters + CAS for 1.5 years): approximately GBP 1,164–2,328
+- This is in addition to visa application fee (GBP 490 for student visa from outside UK)
+
+**28-day financial holding rule — practical guidance:**
+- Count backwards 31 days from your intended visa application date → that is the end date of your 28-day window
+- Funds must stay above the required level every single day during those 28 consecutive days
+- If a bank account has fluctuations, maintain a separate account specifically for this purpose during the 28-day window
+- Loan sanction letters count as financial evidence — check the specific bank's sanctioned amount on the letter
+
+---
+
+### 8.8 Banking in the UK
+
+- **Wise / Revolut (Multi-currency account):** Recommended before arrival — open online from India, use immediately on landing for transactions
+- **Barclays Student Account:** Most Indian students use this; no minimum balance; offers overdraft facility to students
+- **HSBC:** Good for Indian students — Indian HSBC customers can often transfer credit history; useful for international banking connections
+- **Monzo / Starling (App-only banks):** Fast to open, no fees, great for daily use; accepted everywhere; popular with students
+- Opening requirements: Passport, biometric residence permit (BRP), university enrollment letter, UK address
+
+---
+
 ## Section 6: Vetted Answers to Common Student Questions
 
 These are Leap-approved answers counsellors should give when these questions arise. Deliver them confidently and in your own words.
@@ -734,3 +1172,128 @@ General process: application → sanction → acceptance letter from university 
 Work experience can compensate for a lower CGPA, especially for MBA and MSc Management programs. Portfolio quality is the primary admission criterion for design programs — CGPA is secondary.
 
 **Counsellor note:** Never close the conversation on CGPA alone. Ask about work experience, portfolio, research, or other differentiators before deciding the student is not eligible.
+
+---
+
+### 6.6 Scholarships for Australia — What options does the student have?
+
+**Vetted answer:** Good news — there are several scholarship options for Australia, though most are partial reductions rather than full funding.
+
+**Most accessible:**
+- **Destination Australia Scholarship:** AUD 15,000/year (₹8.25L) for studying at a regional campus (Federation, CQU, USQ, Charles Darwin). No separate application — allocated by the university. Stacks with lower tuition at regional universities, making them surprisingly affordable.
+- **University merit scholarships:** Most Australian universities offer automatic merit scholarships of 10–25% tuition reduction for students with CGPA 8.0+ and IELTS 7.0+. Monash, UQ, and Deakin are particularly known for this. No separate application — considered automatically.
+
+**Competitive but significant:**
+- **Australia Awards (formerly Endeavour Awards):** Fully funded — tuition + living allowance + airfare + health insurance. Extremely competitive (CGPA 8.5+, strong professional experience, demonstrated development impact). Application in April–June for next year's intake.
+
+**Practical advice for most Indian students:**
+- Target regional campuses for Destination Australia + lower tuition combination
+- Apply to universities where merit scholarships are automatic (Monash, Deakin, La Trobe)
+- Budget for ₹3–8L scholarship reduction as realistic range; full scholarships are rare for taught Masters
+
+---
+
+### 6.7 Scholarships for UK — What options does the student have?
+
+**Vetted answer:** The UK has the most diverse scholarship ecosystem for Indian students.
+
+**Most accessible:**
+- **GREAT Scholarship:** GBP 10,000 (₹10.7L) tuition reduction at 31 UK universities for Indian students. Apply through British Council India + individual universities. Worth applying for any student with CGPA 7.0+.
+- **University merit scholarships:** Edinburgh (₹5.35L automatic), Leeds (₹3.2L for CGPA 7.0+), Sheffield (25% tuition), Birmingham (₹5.35L). These are automatic or require one application form.
+
+**Competitive but life-changing:**
+- **Chevening Scholarship:** Fully funded (tuition + ₹1.3L/month stipend + airfare). Requires 2+ years work experience and a leadership profile. Application in August each year. Results in June.
+- **Commonwealth Scholarships:** Fully funded; for development-oriented programs (health, education, governance). Very competitive.
+
+**Practical advice:**
+- Apply to at least 3–4 universities simultaneously and ask each about scholarship consideration at the time of application
+- Even partial scholarships (₹2–6L) materially change the UK's cost competitiveness
+- A student with CGPA 7.5+ should expect some scholarship from any mid-tier UK university
+
+---
+
+### 6.8 What are the top universities in Australia for Data Science / CS / AI?
+
+**Vetted answer:** For Data Science, Computer Science, and AI in Australia, the best universities are:
+
+**Go8 (premium tier):**
+- **UNSW Sydney** — MSc Data Science (2 years), ₹30L/year tuition. Ranked #1 in Australia for CS. Sydney location with strong tech employer connections.
+- **University of Melbourne** — Master of Data Science (2 years), ₹28L/year. Very strong program; Melbourne has a vibrant tech sector.
+- **Monash University** — Master of Data Science (2 years), ₹24L/year. Automatic merit scholarships for CGPA 8.0+. Good value.
+- **University of Sydney** — Master of Data Science (2 years), ₹26L/year. Strong industry connections; Sydney tech hub.
+- **UQ Brisbane** — Master of Data Science (2 years), ₹25L/year. Brisbane is growing fast as a tech city.
+
+**Good value mid-tier:**
+- **RMIT University** — Master of AI (2 years), ₹22L/year. Standalone AI program; strong industry ties.
+- **Deakin University** — Master of Data Analytics (2 years), ₹20L/year. More accessible CGPA requirement (6.5+).
+
+**Regional for budget + PR advantage:**
+- **University of Southern Queensland (USQ)** — Master of Data Science (2 years), ₹13L/year. Regional campus → 3-year 485 visa. Very cost-effective.
+- **Federation University** — Data programs, ₹13L/year. Regional → 3-year 485. Low entry requirements (CGPA 6.0+).
+
+**Honest guidance:** For a student interested in AI specifically, most Go8 universities teach AI as a specialisation within Data Science or CS — not as a separate degree. RMIT and Deakin offer standalone AI masters degrees. If the student's goal is to work in AI, they should look at course structure (electives, specialisations) rather than the program name.
+
+---
+
+### 6.9 What are the top universities in the UK for Data Science / CS / AI?
+
+**Vetted answer:** The UK is excellent for AI and Data Science — 1-year Masters, strong employer connections, and several programs ranked in the global top 20.
+
+**Russell Group (premium, expensive):**
+- **Imperial College London** — MSc Machine Learning (1 year), ₹42L/year tuition. World-class; extremely competitive (CGPA 8.5+, strong coding background). London location.
+- **UCL** — MSc Machine Learning (1 year), ₹40L/year. Strong research focus. Very competitive.
+- **University of Edinburgh** — MSc AI (1 year), ₹30L/year. One of Europe's best AI programs. Scotland (lower living costs than London).
+- **University of Manchester** — MSc Data Science (1 year), ₹28L/year. Strong industry partnerships. More accessible CGPA requirement (7.0+).
+- **University of Warwick** — MSc Data Science (1 year), ₹28L/year. Strong mathematics foundation. Good employer reputation.
+
+**Strong mid-tier (better scholarship chances, still excellent):**
+- **University of Birmingham** — MSc Data Science (1 year), ₹25L/year. Automatic scholarship available.
+- **University of Sheffield** — MSc Data Science (1 year), ₹22L/year. Engineering strength. Affordable city.
+- **University of Nottingham** — MSc Data Science (1 year), ₹24L/year. Good industry connections. Merit scholarships.
+- **University of Leeds** — MSc Data Science (1 year), ₹24L/year. Strong analytics program. Affordable.
+
+**Post-92 (accessible, vocational, lower cost):**
+- **Coventry University** — MSc Data Science (1 year), ₹20L/year. Lower CGPA requirement (6.0+). GREAT Scholarship eligible.
+- **Northumbria University** — MSc Data Science (1 year), ₹18L/year. Newcastle — very affordable city. CGPA 6.0+.
+
+**Guidance:** For a student with CGPA 7.0–7.5 and budget around ₹40–50L total, Manchester or Warwick are ideal targets — strong programs, good employer reputation, achievable entry requirements, and scholarship potential. Edinburgh is excellent but competitive.
+
+---
+
+### 6.10 How many hours can I work part-time during studies?
+
+**Vetted answer:**
+
+**Australia:** 48 hours per fortnight (approximately 24 hours per week) during semester. Unlimited during university holidays. At minimum wage (AUD 24/hour), this earns approximately AUD 1,200/fortnight — around ₹1.3L/month. This helps but cannot be relied on from day 1 — allow 1–3 months to find a job after arrival.
+
+**UK:** 20 hours per week during term time; unlimited during official university holidays (summer, Christmas, Easter). At approximately GBP 12/hour, this is around GBP 960/month (₹1.03L/month).
+
+**Important:** Part-time income is supplementary — not a substitute for having adequate savings or loan disbursements from day 1. Students should budget assuming no part-time income for the first 3 months.
+
+**Tax reality:**
+- Australia: International students are non-residents for tax — no tax-free threshold. Pay 15–32.5% tax. File an annual return; you may get some back.
+- UK: Personal allowance applies (GBP 12,570/year tax-free) — part-time income within this range is not taxed.
+
+---
+
+### 6.11 Which country is better for job opportunities after graduation — UK or Australia?
+
+**Vetted answer:** Both are strong, with different characteristics:
+
+**Australia:**
+- Strong sectors: Mining tech, financial services, healthcare, construction, agriculture tech, IT
+- Melbourne and Sydney have well-established tech startup ecosystems
+- Brisbane growing fast — less competition than Sydney/Melbourne
+- Advantage: longer post-study work period (2–4 years on 485) gives more time to find suitable employment
+- Many Indian graduates find their first role within 3–6 months; competitive for tech roles
+
+**UK:**
+- Strong sectors: Finance (London — one of world's top financial centres), consulting, engineering, tech
+- London is one of the best cities globally for financial services, consulting, and tech careers
+- Graduate Route (2 years) gives time to explore — but must find a Skilled Worker sponsor to stay longer
+- Salaries are higher in GBP but living costs (especially London) are significant
+- More structured graduate recruitment cycles — many companies hire 6–9 months before graduation
+
+**For IT / Data Science specifically:** Both are excellent. UK has more finance-sector roles with higher salaries. Australia has better PR prospects. A student whose priority is long-term settlement should lean Australia. A student whose priority is career earnings and prestige should consider UK London programmes.
+
+**Counsellor framing:** Ask the student what matters most — staying abroad long-term, maximising career income, or returning to India with a strong credential. This determines which job market matters more.
